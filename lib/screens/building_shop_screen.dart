@@ -1,21 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:zelix_rised_trades/core/enums/resource_type.dart';
+import 'package:zelix_rised_trades/core/models/building.dart';
+import 'package:zelix_rised_trades/core/models/warehouse.dart';
 import 'package:zelix_rised_trades/core/services/firestore_service.dart';
-
-class Building {
-  final String name;
-  final String emoji;
-  final String description;
-  int cost;
-  int count;
-
-  Building({
-    required this.name,
-    required this.emoji,
-    required this.description,
-    required this.cost,
-    this.count = 0,
-  });
-}
+import 'package:zelix_rised_trades/screens/warehouse_screen.dart';
 
 class BuildingShopScreen extends StatefulWidget {
   const BuildingShopScreen({super.key});
@@ -83,13 +71,15 @@ class _BuildingShopScreenState extends State<BuildingShopScreen> {
       //final building = buildings.firstWhere((b) => b.name == buildingName, orElse: () => Building(name: buildingName, emoji: '❓', description: 'Unknown building', cost: cost));
       for (final building in buildings) {
         if (building.name == buildingName) {
-          setState(() {
+          //setState(() {
             building.count = count;
             building.cost = cost;
-          });
+         // });
           break;
         }
+
       }
+      setState(() {});
     }
   }
 
@@ -140,6 +130,7 @@ class _BuildingShopScreenState extends State<BuildingShopScreen> {
               ),
             ),
           ),
+          
         ),
         body: Column(
           mainAxisSize: MainAxisSize.max,
@@ -206,6 +197,16 @@ class _BuildingShopScreenState extends State<BuildingShopScreen> {
             fontStyle: FontStyle.italic,
           ),
         ),
+        actions: [
+            IconButton(
+              icon: Icon(Icons.warehouse, color: Colors.black54),
+              onPressed: () => Navigator.of(context).pushReplacement(
+                MaterialPageRoute(
+                  builder: (context) => WarehouseScreen(warehouse: Warehouse(capacity: 500,id: "w1", name: "Warehouse", stock: {ResourceType.wood :5})),
+                ),
+              ),
+            ),
+          ],
         centerTitle: true,
         backgroundColor: Colors.amber[100],
       ),

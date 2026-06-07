@@ -70,12 +70,31 @@ class Warehouse {
     return stock[type] ?? 0;
   }
 
+  int get usedCapacity {
+    return stock.values.fold(0, (sum, amount) => sum + amount);
+  }
+
+  int get freeCapacity {
+    return capacity - usedCapacity;
+  }
+  bool canAdd(int amount) {
+  return freeCapacity >= amount;
+}
+
   void add(
     ResourceType type,
     int amount, {
     required String reason,
     bool log = true,
   }) {
+    if (!canAdd(amount)) {
+      this.log(
+      "Warehouse Full",
+      type: type,
+    );
+      return;
+    }
+
     stock[type] = get(type) + amount;
     if (log) {
       _addLog(type, amount, 'in', reason);
@@ -115,12 +134,7 @@ class Warehouse {
     }
   }
 
-  void _addLog(
-    ResourceType type,
-    int amount,
-    String operation,
-    String reason,
-  ) {
+  void _addLog(ResourceType type, int amount, String operation, String reason) {
     final log = WarehouseLog(
       type: type,
       amount: amount,
@@ -135,10 +149,7 @@ class Warehouse {
     }
   }
 
-  List<WarehouseLog> getLogs({
-    ResourceType? filterType,
-    int limit = 50,
-  }) {
+  List<WarehouseLog> getLogs({ResourceType? filterType, int limit = 50}) {
     var result = logs;
     if (filterType != null) {
       result = result.where((l) => l.type == filterType).toList();

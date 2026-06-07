@@ -1,5 +1,5 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:zelix_rised_trades/screens/building_shop_screen.dart';
+import 'package:zelix_rised_trades/core/models/building.dart';
 import '../models/warehouse.dart';
 
 class FirestoreService {
@@ -103,13 +103,11 @@ class FirestoreService {
     Building building,
   ) async {
     try {
-      await firestore.collection('purchases').doc("${building.name}").set({
+      await firestore.collection('buildings').doc(building.name).set({
       'building': building.name,
       'cost': building.cost,
       'count': building.count,
-      'timestamp': (DateTime.now().toUtc().hour+9).toString() + ":" + DateTime.now().minute.toString() + ":" + 
-                   DateTime.now().second.toString() + "           " + DateTime.now().day.toString() + "/" + 
-                   DateTime.now().month.toString() + "/" + DateTime.now().year.toString(),
+      'timestamp': FieldValue.serverTimestamp(),
     });
       print('PURCHASE LOGGED: ${building.name}');
     } catch (e) {
@@ -118,7 +116,7 @@ class FirestoreService {
   }
   Future<List<Map<String, dynamic>>> getAllPurchases() async {
     try {
-      final snapshot = await firestore.collection('purchases').get();
+      final snapshot = await firestore.collection('buildings').get();
       return snapshot.docs
           .map((doc) => doc.data())
           .toList();
