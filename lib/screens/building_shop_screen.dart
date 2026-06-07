@@ -1,5 +1,5 @@
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
+import 'package:zelix_rised_trades/core/services/firestore_service.dart';
 
 class Building {
   final String name;
@@ -26,6 +26,7 @@ class BuildingShopScreen extends StatefulWidget {
 
 class _BuildingShopScreenState extends State<BuildingShopScreen> {
   int money = 100000;
+  List<Map<String, dynamic>> purchases = [];
 
   final List<Building> buildings = [
     Building(
@@ -59,6 +60,38 @@ class _BuildingShopScreenState extends State<BuildingShopScreen> {
       cost: 50000,
     ),
   ];
+  @override
+  initState() {
+    super.initState();
+    loadPurchases();
+  }
+
+  Future<void> loadPurchases() async {
+    await FirestoreService().getAllPurchases().then((data) {
+      setState(() {
+        purchases = data;
+      });
+    });
+    if (purchases.isEmpty) {
+      print('No purchases found in Firestore.');
+      return;
+    }
+    for (final purchase in purchases) {
+      final buildingName = purchase['building'];
+      final cost = purchase['cost'];
+      final count = purchase['count'];
+      //final building = buildings.firstWhere((b) => b.name == buildingName, orElse: () => Building(name: buildingName, emoji: '❓', description: 'Unknown building', cost: cost));
+      for (final building in buildings) {
+        if (building.name == buildingName) {
+          setState(() {
+            building.count = count;
+            building.cost = cost;
+          });
+          break;
+        }
+      }
+    }
+  }
 
   Future<void> buyBuilding(int index) async {
     final building = buildings[index];
@@ -77,14 +110,7 @@ class _BuildingShopScreenState extends State<BuildingShopScreen> {
       building.count++;
       building.cost = (building.cost * 1.3).round();
     });
-    await FirebaseFirestore.instance.collection('purchases').doc("${building.name}").set({
-      'building': building.name,
-      'cost': building.cost,
-      'count': building.count,
-      'timestamp': (DateTime.now().toUtc().hour+9).toString() + ":" + DateTime.now().minute.toString() + ":" + 
-                   DateTime.now().second.toString() + "           " + DateTime.now().day.toString() + "/" + 
-                   DateTime.now().month.toString() + "/" + DateTime.now().year.toString(),
-    });
+    await FirestoreService().updatePurchasedBuildings(building);
 
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
@@ -97,6 +123,77 @@ class _BuildingShopScreenState extends State<BuildingShopScreen> {
 
   @override
   Widget build(BuildContext context) {
+    if (purchases.isEmpty) {
+      return Scaffold(
+        appBar: AppBar(
+          backgroundColor: Colors.amber[100],
+          title: Container(
+            alignment: Alignment.center,
+            child: const Text(
+              'Building Shop',
+              style: TextStyle(
+                fontWeight: FontWeight.bold,
+                color: Colors.brown,
+                fontSize: 22,
+                letterSpacing: 1.5,
+                fontStyle: FontStyle.italic,
+              ),
+            ),
+          ),
+        ),
+        body: Column(
+          mainAxisSize: MainAxisSize.max,
+          children: [
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 20),
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  colors: [Colors.brown[700]!, Colors.brown[500]!],
+                ),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.brown.withValues(alpha: 0.3),
+                    blurRadius: 8,
+                    offset: const Offset(0, 4),
+                  ),
+                ],
+              ),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  const Icon(
+                    Icons.monetization_on,
+                    color: Colors.amber,
+                    size: 32,
+                  ),
+                  const SizedBox(width: 8),
+                  Text(
+                    '¥ $money',
+                    style: const TextStyle(
+                      fontSize: 28,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.white,
+                      letterSpacing: 2,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            Container(
+              margin: const EdgeInsets.only(top: 250),
+              child: const Center(
+                child: CircularProgressIndicator(
+                  valueColor: AlwaysStoppedAnimation<Color>(Colors.brown),
+                  strokeWidth: 4,
+                  backgroundColor: Colors.white,
+                ),
+              ),
+            ),
+          ],
+        ),
+      );
+    }
     return Scaffold(
       appBar: AppBar(
         title: const Text(
@@ -134,7 +231,11 @@ class _BuildingShopScreenState extends State<BuildingShopScreen> {
             child: Row(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                const Icon(Icons.monetization_on, color: Colors.amber, size: 32),
+                const Icon(
+                  Icons.monetization_on,
+                  color: Colors.amber,
+                  size: 32,
+                ),
                 const SizedBox(width: 8),
                 Text(
                   '¥ $money',
@@ -234,8 +335,9 @@ class _BuildingShopScreenState extends State<BuildingShopScreen> {
                                         ),
                                         decoration: BoxDecoration(
                                           color: Colors.brown[100],
-                                          borderRadius:
-                                              BorderRadius.circular(10),
+                                          borderRadius: BorderRadius.circular(
+                                            10,
+                                          ),
                                         ),
                                         child: Text(
                                           'x${building.count}',
@@ -314,9 +416,7 @@ class _BuildingShopScreenState extends State<BuildingShopScreen> {
             padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(
               color: Colors.brown[50],
-              border: Border(
-                top: BorderSide(color: Colors.brown[200]!),
-              ),
+              border: Border(top: BorderSide(color: Colors.brown[200]!)),
             ),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -335,13 +435,15 @@ class _BuildingShopScreenState extends State<BuildingShopScreen> {
                   runSpacing: 4,
                   children: buildings
                       .where((b) => b.count > 0)
-                      .map((b) => Text(
-                            '${b.emoji} ${b.name}: ${b.count}',
-                            style: TextStyle(
-                              fontSize: 14,
-                              color: Colors.brown[600],
-                            ),
-                          ))
+                      .map(
+                        (b) => Text(
+                          '${b.emoji} ${b.name}: ${b.count}',
+                          style: TextStyle(
+                            fontSize: 14,
+                            color: Colors.brown[600],
+                          ),
+                        ),
+                      )
                       .toList(),
                 ),
                 if (buildings.every((b) => b.count == 0))
