@@ -1,8 +1,6 @@
 import 'package:flutter/material.dart';
 import '../core/enums/resource_type.dart';
 import '../core/models/warehouse.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:intl/intl.dart';
 
 class WarehouseScreen extends StatefulWidget {
   final Warehouse warehouse;

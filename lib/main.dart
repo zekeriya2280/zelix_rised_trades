@@ -6,7 +6,7 @@ import 'package:flutter/material.dart';
 import 'core/enums/resource_type.dart';
 import 'core/models/warehouse.dart';
 import 'screens/warehouse_screen.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
+import 'core/services/firestore_service.dart';
 
 enum WarehouseAction {
   none,
@@ -76,15 +76,14 @@ class _DashboardScreenState extends State<DashboardScreen> {
   int furnitureProductionTimer = 0;
   int sellTimer = 0;
 
+  final FirestoreService firestoreService = FirestoreService();
   Timer? timer;
-  final FirebaseFirestore firestore = FirebaseFirestore.instance;
-
 
   @override
   void initState()  {
     super.initState();
     Future.microtask(() async {
-    await logToFirestore("Game started");
+    await firestoreService.logToFirestore("Game started");
   }); 
     warehouse = Warehouse(
       id: 'main_warehouse',
@@ -101,18 +100,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
       gameTick();
     });
   }
-  Future<void> logToFirestore(String message) async {
-  try {
-    final doc = await firestore.collection('activity_logs').add({
-      'message': message,
-      'timestamp': FieldValue.serverTimestamp(),
-    });
-
-    print('SUCCESS: ${doc.id}');
-  } catch (e) {
-    print('FIRESTORE ERROR: $e');
-  }
-}
   void gameTick() {
     // Only advance each production timer when the corresponding building exists.
     if (forests > 0) {

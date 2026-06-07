@@ -15,9 +15,32 @@ class WarehouseLog {
     required this.timestamp,
   });
 
+  Map<String, dynamic> toMap() {
+    return {
+      'type': type?.name,
+      'amount': amount,
+      'operation': operation,
+      'reason': reason,
+      'timestamp': timestamp.toIso8601String(),
+    };
+  }
+
+  factory WarehouseLog.fromMap(Map<String, dynamic> map) {
+    return WarehouseLog(
+      type: map['type'] != null
+          ? ResourceType.values.firstWhere((e) => e.name == map['type'])
+          : null,
+      amount: map['amount'] as int,
+      operation: map['operation'] as String,
+      reason: map['reason'] as String,
+      timestamp: DateTime.parse(map['timestamp'] as String),
+    );
+  }
+
   @override
   String toString() {
-    final time = '${timestamp.hour.toString().padLeft(2, '0')}:${timestamp.minute.toString().padLeft(2, '0')}:${timestamp.second.toString().padLeft(2, '0')}';
+    final time =
+        '${timestamp.hour.toString().padLeft(2, '0')}:${timestamp.minute.toString().padLeft(2, '0')}:${timestamp.second.toString().padLeft(2, '0')}';
     final typeLabel = type != null ? ' ${type!.name}' : '';
     final amountLabel = amount > 0 ? ': $amount' : '';
     return '[$operation]$typeLabel$amountLabel ($reason) - $time';
@@ -121,5 +144,40 @@ class Warehouse {
       result = result.where((l) => l.type == filterType).toList();
     }
     return result.take(limit).toList();
+  }
+
+  Map<String, dynamic> toMap() {
+    return {
+      'id': id,
+      'name': name,
+      'capacity': capacity,
+      'stock': stock.map((key, value) => MapEntry(key.name, value)),
+      'logs': logs.map((log) => log.toMap()).toList(),
+    };
+  }
+
+  factory Warehouse.fromMap(Map<String, dynamic> map) {
+    final stockMap = <ResourceType, int>{};
+    if (map['stock'] != null) {
+      (map['stock'] as Map<String, dynamic>).forEach((key, value) {
+        stockMap[ResourceType.values.firstWhere((e) => e.name == key)] =
+            value as int;
+      });
+    }
+
+    List<WarehouseLog> logs = [];
+    if (map['logs'] != null) {
+      logs = (map['logs'] as List<dynamic>)
+          .map((e) => WarehouseLog.fromMap(e as Map<String, dynamic>))
+          .toList();
+    }
+
+    return Warehouse(
+      id: map['id'] as String,
+      name: map['name'] as String,
+      capacity: map['capacity'] as int,
+      stock: stockMap,
+      logs: logs,
+    );
   }
 }
