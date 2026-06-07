@@ -1,0 +1,4 @@
+enum FactoryType {
+  lumberMill,
+  furnitureFactory,
+}
