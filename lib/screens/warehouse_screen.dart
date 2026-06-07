@@ -1,7 +1,8 @@
 import 'package:flutter/material.dart';
-
 import '../core/enums/resource_type.dart';
 import '../core/models/warehouse.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:intl/intl.dart';
 
 class WarehouseScreen extends StatefulWidget {
   final Warehouse warehouse;
@@ -12,13 +13,16 @@ class WarehouseScreen extends StatefulWidget {
   final int furnitureProductionTimer;
   final int sellTimer;
   final int productionInterval;
+
   final String selectedSource;
   final String selectedProduct;
   final String selectedDestination;
   final String routeDescription;
+
   final ValueChanged<String> onSourceChanged;
   final ValueChanged<String> onProductChanged;
   final ValueChanged<String> onDestinationChanged;
+
   final VoidCallback onStartRoute;
   final VoidCallback onStopRoute;
 
@@ -51,122 +55,96 @@ class _WarehouseScreenState extends State<WarehouseScreen> {
   late String selectedSource;
   late String selectedProduct;
   late String selectedDestination;
-  late String activeActionLabel;
-  late String routeDescription;
-
-  final sourceOptions = ['Warehouse'];
-  final productOptions = ['Wood', 'Lumber', 'Furniture'];
-  final destinationOptions = ['Lumber Mill', 'Furniture Factory', 'Tokyo'];
 
   @override
   void initState() {
     super.initState();
+
     selectedSource = widget.selectedSource;
     selectedProduct = widget.selectedProduct;
     selectedDestination = widget.selectedDestination;
-    activeActionLabel = widget.activeActionLabel;
-    routeDescription = widget.routeDescription;
   }
 
-  WarehouseAction getSelectedAction() {
-    if (selectedProduct == 'Wood' && selectedDestination == 'Lumber Mill') {
-      return WarehouseAction.autoLumber;
-    }
-    if (selectedProduct == 'Lumber' && selectedDestination == 'Furniture Factory') {
-      return WarehouseAction.autoFurniture;
-    }
-    if (selectedProduct == 'Furniture' && selectedDestination == 'Tokyo') {
-      return WarehouseAction.autoSell;
-    }
-    return WarehouseAction.none;
-  }
+  @override
+  void didUpdateWidget(covariant WarehouseScreen oldWidget) {
+    super.didUpdateWidget(oldWidget);
 
-  bool get hasValidSelection => getSelectedAction() != WarehouseAction.none;
-
-  String get actionTitle {
-    switch (activeActionLabel) {
-      case 'autoLumber':
-        return 'Wood to Lumber Mill';
-      case 'autoFurniture':
-        return 'Lumber to Furniture Factory';
-      case 'autoSell':
-        return 'Furniture to City Sale';
-      default:
-        return 'No active route';
-    }
+    selectedSource = widget.selectedSource;
+    selectedProduct = widget.selectedProduct;
+    selectedDestination = widget.selectedDestination;
   }
 
   int get activeTimer {
-    switch (activeActionLabel) {
+    switch (widget.activeActionLabel) {
       case 'autoLumber':
         return widget.lumberProductionTimer;
+
       case 'autoFurniture':
         return widget.furnitureProductionTimer;
+
       case 'autoSell':
         return widget.sellTimer;
+
       default:
         return 0;
     }
   }
 
-  Color get activeColor {
-    switch (activeActionLabel) {
+  bool get hasValidSelection {
+    return (selectedProduct == 'Wood' &&
+            selectedDestination == 'Lumber Mill') ||
+        (selectedProduct == 'Lumber' &&
+            selectedDestination == 'Furniture Factory') ||
+        (selectedProduct == 'Furniture' &&
+            selectedDestination == 'Tokyo');
+  }
+
+  String get actionTitle {
+    switch (widget.activeActionLabel) {
       case 'autoLumber':
-        return Colors.orange.shade300;
+        return 'Wood → Lumber Mill';
+
       case 'autoFurniture':
-        return Colors.blue.shade300;
+        return 'Lumber → Furniture Factory';
+
       case 'autoSell':
-        return Colors.green.shade300;
+        return 'Furniture → Tokyo';
+
       default:
-        return Colors.grey.shade500;
+        return 'No Active Route';
     }
   }
 
-  Widget actionProgressCard() {
-    final enabled = activeActionLabel != 'none';
-    final baseColor = enabled ? activeColor : Colors.grey;
-    final label = enabled ? '${productionPercent()}% complete' : 'Waiting for route';
+  double get progress {
+    if (widget.productionInterval <= 0) return 0;
 
+    return activeTimer
+        .toDouble()
+        .clamp(0, widget.productionInterval.toDouble());
+  }
+
+  Widget stockTile(String title, int amount) {
     return Card(
-      color: baseColor,
+      color: Colors.brown.shade200,
       child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
+        padding: const EdgeInsets.all(12),
+        child: Row(
           children: [
+            Expanded(
+              child: Text(
+                title,
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ),
             Text(
-              'Active Warehouse Route',
+              '$amount',
               style: const TextStyle(
-                fontWeight: FontWeight.bold,
                 color: Colors.white,
-                fontStyle: FontStyle.italic,
+                fontWeight: FontWeight.bold,
               ),
-            ),
-            const SizedBox(height: 12),
-            Text(
-              actionTitle,
-              style: const TextStyle(color: Colors.white, fontSize: 16),
-            ),
-            const SizedBox(height: 12),
-            SliderTheme(
-              data: SliderTheme.of(context).copyWith(
-                activeTrackColor: enabled ? baseColor.withAlpha((0.95 * 255).round()) : Colors.white54,
-                inactiveTrackColor: enabled ? baseColor.withAlpha((0.4 * 255).round()) : Colors.white24,
-                thumbColor: enabled ? baseColor.withAlpha((0.9 * 255).round()) : Colors.white38,
-                overlayColor: enabled ? baseColor.withAlpha((0.25 * 255).round()) : Colors.white30,
-              ),
-              child: Slider(
-                value: enabled ? activeTimer.toDouble() : 0.0,
-                min: 0,
-                max: widget.productionInterval.toDouble(),
-                divisions: widget.productionInterval,
-                label: label,
-                onChanged: null,
-              ),
-            ),
-            Text(
-              label,
-              style: const TextStyle(color: Colors.white70, fontSize: 12),
             ),
           ],
         ),
@@ -174,161 +152,220 @@ class _WarehouseScreenState extends State<WarehouseScreen> {
     );
   }
 
-  double productionPercent() {
-    if (widget.productionInterval == 0) return 0;
-    return (activeTimer / widget.productionInterval * 100).clamp(0, 100).toDouble();
-  }
-
-  Widget buildDropdownField({
+  Widget dropdown({
     required String label,
     required String value,
     required List<String> items,
-    required ValueChanged<String?> onChanged,
+    required ValueChanged<String> onChanged,
   }) {
     return DropdownButtonFormField<String>(
+      initialValue: value,
       decoration: InputDecoration(
         labelText: label,
-        filled: true,
-        fillColor: Colors.white,
-        border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+        ),
       ),
-      initialValue: value,
-      items: items.map((item) {
-        return DropdownMenuItem(value: item, child: Text(item));
-      }).toList(),
-      onChanged: onChanged,
+      items: items
+          .map(
+            (e) => DropdownMenuItem(
+              value: e,
+              child: Text(e),
+            ),
+          )
+          .toList(),
+      onChanged: (v) {
+        if (v == null) return;
+        onChanged(v);
+      },
     );
   }
 
   @override
   Widget build(BuildContext context) {
-    final selectedAction = getSelectedAction();
-    final canStart = hasValidSelection;
-    final targetDescription = canStart ? '$selectedProduct → $selectedDestination' : 'Please choose a valid product and destination';
-
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Warehouse Control'),
+        title: const Text('Warehouse'),
       ),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(16),
         child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             Card(
-              color: Colors.brown[200],
+              color: Colors.brown,
               child: Padding(
                 padding: const EdgeInsets.all(16),
                 child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
                     const Text(
-                      'Warehouse Status',
-                      style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18, color: Colors.white),
+                      'Warehouse Stock',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 20,
+                        fontWeight: FontWeight.bold,
+                      ),
                     ),
                     const SizedBox(height: 12),
-                    Text('Wood: ${widget.warehouse.getResource('Wood')}', style: const TextStyle(color: Colors.white)),
-                    Text('Lumber: ${widget.warehouse.getResource('Lumber')}', style: const TextStyle(color: Colors.white)),
-                    Text('Furniture: ${widget.warehouse.getResource('Furniture')}', style: const TextStyle(color: Colors.white)),
-                    const SizedBox(height: 12),
-                    Text('Active route: $routeDescription', style: const TextStyle(color: Colors.white70)),
+                    stockTile(
+                      'Wood',
+                      widget.warehouse.get(ResourceType.wood),
+                    ),
+                    stockTile(
+                      'Lumber',
+                      widget.warehouse.get(ResourceType.lumber),
+                    ),
+                    stockTile(
+                      'Furniture',
+                      widget.warehouse.get(ResourceType.furniture),
+                    ),
                   ],
                 ),
               ),
             ),
-            const SizedBox(height: 16),
-            buildDropdownField(
-              label: 'From',
+
+            const SizedBox(height: 20),
+
+            dropdown(
+              label: 'Source',
               value: selectedSource,
-              items: sourceOptions,
+              items: const [
+                'Warehouse',
+              ],
               onChanged: (value) {
-                if (value == null) return;
                 setState(() {
                   selectedSource = value;
                 });
+
                 widget.onSourceChanged(value);
               },
             ),
+
             const SizedBox(height: 12),
-            buildDropdownField(
+
+            dropdown(
               label: 'Product',
               value: selectedProduct,
-              items: productOptions,
+              items: const [
+                'Wood',
+                'Lumber',
+                'Furniture',
+              ],
               onChanged: (value) {
-                if (value == null) return;
                 setState(() {
                   selectedProduct = value;
                 });
+
                 widget.onProductChanged(value);
               },
             ),
+
             const SizedBox(height: 12),
-            buildDropdownField(
-              label: 'To',
+
+            dropdown(
+              label: 'Destination',
               value: selectedDestination,
-              items: destinationOptions,
+              items: const [
+                'Lumber Mill',
+                'Furniture Factory',
+                'Tokyo',
+              ],
               onChanged: (value) {
-                if (value == null) return;
                 setState(() {
                   selectedDestination = value;
                 });
+
                 widget.onDestinationChanged(value);
               },
             ),
-            const SizedBox(height: 16),
+
+            const SizedBox(height: 20),
+
             Card(
-              color: Colors.white,
               child: Padding(
                 padding: const EdgeInsets.all(16),
                 child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Text('Route Preview', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-                    const SizedBox(height: 8),
-                    Text(targetDescription),
-                    const SizedBox(height: 8),
-                    Text('Lumber Mills: ${widget.lumberMills}, Furniture Factories: ${widget.furnitureFactories}'),
-                    if (!canStart)
-                      const Padding(
-                        padding: EdgeInsets.only(top: 8),
-                        child: Text('Use Wood → Lumber Mill, Lumber → Furniture Factory or Furniture → Tokyo to start a valid route.', style: TextStyle(color: Colors.red)),
+                    Text(
+                      widget.routeDescription,
+                      textAlign: TextAlign.center,
+                    ),
+                    const SizedBox(height: 16),
+
+                    ElevatedButton(
+                      onPressed: hasValidSelection
+                          ? widget.onStartRoute
+                          : null,
+                      child: const Text(
+                        'Start Route',
                       ),
+                    ),
+
+                    const SizedBox(height: 8),
+
+                    OutlinedButton(
+                      onPressed:
+                          widget.activeActionLabel != 'none'
+                              ? widget.onStopRoute
+                              : null,
+                      child: const Text(
+                        'Stop Route',
+                      ),
+                    ),
                   ],
                 ),
               ),
             ),
-            const SizedBox(height: 16),
-            ElevatedButton(
-              onPressed: canStart ? () {
-                activeActionLabel = selectedAction.name;
-                routeDescription = '$selectedProduct from $selectedSource → $selectedDestination';
-                widget.onStartRoute();
-                setState(() {});
-              } : null,
-              child: const Text('Start Warehouse Route'),
+
+            const SizedBox(height: 20),
+
+            Card(
+              color: Colors.blueGrey,
+              child: Padding(
+                padding: const EdgeInsets.all(16),
+                child: Column(
+                  children: [
+                    Text(
+                      actionTitle,
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+
+                    const SizedBox(height: 16),
+
+                    Slider(
+                      value: progress,
+                      min: 0,
+                      max: widget.productionInterval.toDouble(),
+                      onChanged: null,
+                    ),
+
+                    Text(
+                      '$activeTimer / ${widget.productionInterval}',
+                      style: const TextStyle(
+                        color: Colors.white,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
             ),
-            const SizedBox(height: 12),
-            OutlinedButton(
-              onPressed: activeActionLabel != 'none' ? () {
-                activeActionLabel = 'none';
-                routeDescription = 'No active warehouse route';
-                widget.onStopRoute();
-                setState(() {});
-              } : null,
-              child: const Text('Stop Warehouse Route'),
-            ),
-            const SizedBox(height: 16),
-            actionProgressCard(),
-            const SizedBox(height: 16),
+
+            const SizedBox(height: 20),
+
             Card(
               child: Padding(
                 padding: const EdgeInsets.all(16),
                 child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: const [
-                    Text('Notes', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-                    SizedBox(height: 8),
-                    Text('Use the warehouse route selection to decide what product moves to which factory or city. The main menu sliders will now reflect the active warehouse automation.'),
+                  children: [
+                    Text(
+                      'Lumber Mills: ${widget.lumberMills}',
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      'Furniture Factories: ${widget.furnitureFactories}',
+                    ),
                   ],
                 ),
               ),
@@ -340,24 +377,3 @@ class _WarehouseScreenState extends State<WarehouseScreen> {
   }
 }
 
-enum WarehouseAction {
-  none,
-  autoLumber,
-  autoFurniture,
-  autoSell,
-}
-
-extension WarehouseResourceExtension on Warehouse {
-  int getResource(String name) {
-    switch (name) {
-      case 'Wood':
-        return get(ResourceType.wood);
-      case 'Lumber':
-        return get(ResourceType.lumber);
-      case 'Furniture':
-        return get(ResourceType.furniture);
-      default:
-        return 0;
-    }
-  }
-}

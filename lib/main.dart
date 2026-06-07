@@ -1,10 +1,12 @@
 import 'dart:async';
+import 'package:firebase_core/firebase_core.dart';
 import 'package:intl/intl.dart';
 import 'package:flutter/material.dart';
 
 import 'core/enums/resource_type.dart';
 import 'core/models/warehouse.dart';
 import 'screens/warehouse_screen.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 
 enum WarehouseAction {
   none,
@@ -13,8 +15,10 @@ enum WarehouseAction {
   autoSell,
 }
 
-void main() {
-  runApp(const MyApp());
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  await Firebase.initializeApp();
+  runApp(MyApp());
 }
 
 class MyApp extends StatelessWidget {
@@ -73,11 +77,15 @@ class _DashboardScreenState extends State<DashboardScreen> {
   int sellTimer = 0;
 
   Timer? timer;
+  final FirebaseFirestore firestore = FirebaseFirestore.instance;
+
 
   @override
-  void initState() {
+  void initState()  {
     super.initState();
-
+    Future.microtask(() async {
+    await logToFirestore("Game started");
+  }); 
     warehouse = Warehouse(
       id: 'main_warehouse',
       name: 'Main Warehouse',
@@ -93,7 +101,18 @@ class _DashboardScreenState extends State<DashboardScreen> {
       gameTick();
     });
   }
+  Future<void> logToFirestore(String message) async {
+  try {
+    final doc = await firestore.collection('activity_logs').add({
+      'message': message,
+      'timestamp': FieldValue.serverTimestamp(),
+    });
 
+    print('SUCCESS: ${doc.id}');
+  } catch (e) {
+    print('FIRESTORE ERROR: $e');
+  }
+}
   void gameTick() {
     // Only advance each production timer when the corresponding building exists.
     if (forests > 0) {

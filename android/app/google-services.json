@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "334022833215",
+    "project_id": "zelix-rised-trades",
+    "storage_bucket": "zelix-rised-trades.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:334022833215:android:12ed0198fb278aef0b348a",
+        "android_client_info": {
+          "package_name": "com.zelix_rised_trades"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBOZfkXHLA2A2yplftJWwYs1J30NWUXugo"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
