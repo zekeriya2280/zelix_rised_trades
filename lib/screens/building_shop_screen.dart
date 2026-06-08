@@ -15,6 +15,7 @@ class BuildingShopScreen extends StatefulWidget {
 class _BuildingShopScreenState extends State<BuildingShopScreen> {
   int money = 100000;
   List<Map<String, dynamic>> purchases = [];
+  bool isLoading = true;
 
   final List<Building> buildings = [
     Building(
@@ -58,6 +59,7 @@ class _BuildingShopScreenState extends State<BuildingShopScreen> {
     await FirestoreService().getAllPurchases().then((data) {
       setState(() {
         purchases = data;
+        isLoading = false;
       });
     });
     if (purchases.isEmpty) {
@@ -113,7 +115,7 @@ class _BuildingShopScreenState extends State<BuildingShopScreen> {
 
   @override
   Widget build(BuildContext context) {
-    if (purchases.isEmpty) {
+    if (isLoading) {
       return Scaffold(
         appBar: AppBar(
           backgroundColor: Colors.amber[100],
