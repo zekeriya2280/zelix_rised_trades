@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
-import 'package:zelix_rised_trades/core/enums/resource_type.dart';
 import 'package:zelix_rised_trades/core/models/building.dart';
-import 'package:zelix_rised_trades/core/models/warehouse.dart';
+import 'package:zelix_rised_trades/core/models/factory.dart';
+import 'package:zelix_rised_trades/core/models/player.dart';
 import 'package:zelix_rised_trades/core/services/firestore_service.dart';
+import 'package:zelix_rised_trades/core/enums/factory_type.dart';
+import 'package:zelix_rised_trades/screens/factory_screen.dart';
 import 'package:zelix_rised_trades/screens/warehouse_screen.dart';
 
 class BuildingShopScreen extends StatefulWidget {
@@ -52,36 +54,72 @@ class _BuildingShopScreenState extends State<BuildingShopScreen> {
   @override
   initState() {
     super.initState();
-    loadPurchases();
+    _loadData();
   }
 
-  Future<void> loadPurchases() async {
-    await FirestoreService().getAllPurchases().then((data) {
+  Future<void> _loadData() async {
+    await Future.wait([
+      _loadPlayer(),
+      _loadPurchases(),
+    ]);
+  }
+
+  Future<void> _loadPlayer() async {
+    try {
+      final player = await FirestoreService()
+          .getPlayer()
+          .timeout(const Duration(seconds: 10));
+      if (mounted && player != null) {
+        setState(() {
+          money = player.money;
+        });
+      }
+    } catch (e) {
+      print('Player loading failed: $e');
+    }
+  }
+
+  Future<void> _savePlayer() async {
+    await FirestoreService().savePlayer(Player(nickname: 'Player', money: money));
+  }
+
+  Future<void> _loadPurchases() async {
+    try {
+      final data = await FirestoreService()
+          .getAllPurchases()
+          .timeout(const Duration(seconds: 10));
+
+      if (!mounted) return;
+
       setState(() {
         purchases = data;
         isLoading = false;
       });
-    });
-    if (purchases.isEmpty) {
-      print('No purchases found in Firestore.');
-      return;
-    }
-    for (final purchase in purchases) {
-      final buildingName = purchase['building'];
-      final cost = purchase['cost'];
-      final count = purchase['count'];
-      //final building = buildings.firstWhere((b) => b.name == buildingName, orElse: () => Building(name: buildingName, emoji: '❓', description: 'Unknown building', cost: cost));
-      for (final building in buildings) {
-        if (building.name == buildingName) {
-          //setState(() {
+
+      if (purchases.isEmpty) {
+        print('No purchases found in Firestore.');
+        return;
+      }
+      for (final purchase in purchases) {
+        final buildingName = purchase['building'];
+        final cost = purchase['cost'];
+        final count = purchase['count'];
+        for (final building in buildings) {
+          if (building.name == buildingName) {
             building.count = count;
             building.cost = cost;
-         // });
-          break;
+            break;
+          }
         }
-
+        if (mounted) setState(() {});
       }
-      setState(() {});
+    } catch (e) {
+      print('Firestore loading failed: $e');
+      if (mounted) {
+        setState(() {
+          isLoading = false;
+        });
+      }
     }
   }
 
@@ -103,6 +141,35 @@ class _BuildingShopScreenState extends State<BuildingShopScreen> {
       building.cost = (building.cost * 1.3).round();
     });
     await FirestoreService().updatePurchasedBuildings(building);
+    await _savePlayer(); // Save player money to Firestore
+
+    // If the purchased building is a factory type, save it to the factories collection
+    FactoryType? factoryType;
+    switch (building.name) {
+      case 'Forest':
+        factoryType = FactoryType.forest;
+        break;
+      case 'Lumber Mill':
+        factoryType = FactoryType.lumberMill;
+        break;
+      case 'Furniture Factory':
+        factoryType = FactoryType.furnitureFactory;
+        break;
+    }
+
+    if (factoryType != null) {
+      final factoryId = '${factoryType.name}_${DateTime.now().millisecondsSinceEpoch}';
+      final factory = Factory(
+        id: factoryId,
+        type: factoryType,
+        active: true,
+        efficiency: 1.0,
+        lastProduction: DateTime.now().subtract(
+          Duration(seconds: factoryType.productionSeconds),
+        ), // Start ready to produce
+      );
+      await FirestoreService().saveFactory(factory);
+    }
 
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
@@ -111,6 +178,50 @@ class _BuildingShopScreenState extends State<BuildingShopScreen> {
         duration: const Duration(seconds: 1),
       ),
     );
+  }
+
+  Future<void> _confirmReset(BuildContext context) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Reset Game'),
+        content: const Text(
+          'This will delete all factories and purchases, '
+          'and reset the warehouse to default stock.\n\n'
+          'Are you sure?',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(true),
+            style: TextButton.styleFrom(foregroundColor: Colors.red),
+            child: const Text('Reset'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed == true) {
+      await FirestoreService().resetAll();
+      setState(() {
+        money = 100000;
+        for (final building in buildings) {
+          building.count = 0;
+        }
+      });
+      await _loadPurchases();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('✅ Game reset to beginning!'),
+            backgroundColor: Colors.green,
+          ),
+        );
+      }
+    }
   }
 
   @override
@@ -201,12 +312,27 @@ class _BuildingShopScreenState extends State<BuildingShopScreen> {
         ),
         actions: [
             IconButton(
+            icon: Icon(Icons.factory, color: Colors.black54),
+            onPressed: () => Navigator.of(context).pushReplacement(
+              MaterialPageRoute(
+                builder: (context) => FactoryScreen(
+                  warehouseId: "w1",
+                ),
+              ),
+            ),
+          ),
+            IconButton(
               icon: Icon(Icons.warehouse, color: Colors.black54),
               onPressed: () => Navigator.of(context).pushReplacement(
                 MaterialPageRoute(
-                  builder: (context) => WarehouseScreen(warehouse: Warehouse(capacity: 500,id: "w1", name: "Warehouse", stock: {ResourceType.wood :5})),
+              builder: (context) => WarehouseScreen(warehouseId: "w1"),
                 ),
               ),
+            ),
+            IconButton(
+              icon: const Icon(Icons.restart_alt, color: Colors.red),
+              tooltip: 'Reset Game',
+              onPressed: () => _confirmReset(context),
             ),
           ],
         centerTitle: true,

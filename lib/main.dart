@@ -1,11 +1,21 @@
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
 
+import 'core/services/firestore_service.dart';
 import 'screens/building_shop_screen.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  await Firebase.initializeApp();
+
+  try {
+    await Firebase.initializeApp();
+    FirestoreService.markFirebaseAvailable();
+  } catch (e) {
+    // Firebase initialization may fail on emulators without Google Play Services.
+    // The app will still function, but Firebase features won't be available.
+    debugPrint('Firebase initialization failed: $e');
+  }
+
   runApp(MyApp());
 }
 
