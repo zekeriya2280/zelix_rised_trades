@@ -104,8 +104,8 @@ class _WarehouseScreenState extends State<WarehouseScreen> {
                   color: type == ResourceType.wood
                       ? Colors.green[700]
                       : (type == ResourceType.lumber
-                          ? Colors.brown[700]
-                          : Colors.orange[700]),
+                            ? Colors.brown[700]
+                            : Colors.orange[700]),
                 ),
               ),
             ),
@@ -139,9 +139,7 @@ class _WarehouseScreenState extends State<WarehouseScreen> {
     return Card(
       margin: const EdgeInsets.symmetric(vertical: 4),
       elevation: 1,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(10),
-      ),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
       child: ListTile(
         leading: Container(
           width: 36,
@@ -178,10 +176,7 @@ class _WarehouseScreenState extends State<WarehouseScreen> {
               ],
               const SizedBox(width: 8),
             ],
-            Text(
-              time,
-              style: TextStyle(fontSize: 11, color: Colors.grey[500]),
-            ),
+            Text(time, style: TextStyle(fontSize: 11, color: Colors.grey[500])),
           ],
         ),
         dense: true,
@@ -223,8 +218,11 @@ class _WarehouseScreenState extends State<WarehouseScreen> {
                           color: Colors.teal.withValues(alpha: 0.1),
                           borderRadius: BorderRadius.circular(10),
                         ),
-                        child: const Icon(Icons.inventory,
-                            color: Colors.teal, size: 24),
+                        child: const Icon(
+                          Icons.inventory,
+                          color: Colors.teal,
+                          size: 24,
+                        ),
                       ),
                       const SizedBox(width: 12),
                       const Text(
@@ -236,13 +234,15 @@ class _WarehouseScreenState extends State<WarehouseScreen> {
                       ),
                     ],
                   ),
+
                   const SizedBox(height: 16),
                   LinearProgressIndicator(
                     value: capacityPercent,
                     minHeight: 16,
                     backgroundColor: Colors.teal[100],
-                    valueColor:
-                        const AlwaysStoppedAnimation<Color>(Colors.teal),
+                    valueColor: const AlwaysStoppedAnimation<Color>(
+                      Colors.teal,
+                    ),
                   ),
                   const SizedBox(height: 12),
                   Row(
@@ -251,14 +251,13 @@ class _WarehouseScreenState extends State<WarehouseScreen> {
                       Text(
                         'Free: ${warehouse.freeCapacity}',
                         style: const TextStyle(
-                            fontWeight: FontWeight.bold, fontSize: 14),
+                          fontWeight: FontWeight.bold,
+                          fontSize: 14,
+                        ),
                       ),
                       Text(
                         '$usedCapacity / ${warehouse.capacity}',
-                        style: TextStyle(
-                          fontSize: 14,
-                          color: Colors.grey[600],
-                        ),
+                        style: TextStyle(fontSize: 14, color: Colors.grey[600]),
                       ),
                     ],
                   ),
@@ -278,7 +277,10 @@ class _WarehouseScreenState extends State<WarehouseScreen> {
 
           ...ResourceType.values.map((resource) {
             return _resourceCard(
-                resource, warehouse.get(resource), warehouse.capacity);
+              resource,
+              warehouse.get(resource),
+              warehouse.capacity,
+            );
           }),
 
           const SizedBox(height: 24),
@@ -325,9 +327,8 @@ class _WarehouseScreenState extends State<WarehouseScreen> {
             icon: const Icon(Icons.factory, color: Colors.black54),
             onPressed: () => Navigator.of(context).pushReplacement(
               MaterialPageRoute(
-                builder: (context) => FactoryScreen(
-                  warehouseId: widget.warehouseId,
-                ),
+                builder: (context) =>
+                    FactoryScreen(warehouseId: widget.warehouseId),
               ),
             ),
           ),
