@@ -12,13 +12,19 @@ class Factory {
   double efficiency;
   DateTime lastProduction;
 
+  /// Tracks when upkeep was last deducted for this factory.
+  /// Initialized equal to [lastProduction] so first upkeep triggers after
+  /// the production cycle completes.
+  DateTime lastUpkeepPaid;
+
   Factory({
     required this.id,
     required this.type,
     this.active = true,
     this.efficiency = 1,
     required this.lastProduction,
-  });
+    DateTime? lastUpkeepPaid,
+  }) : lastUpkeepPaid = lastUpkeepPaid ?? lastProduction;
 
   Map<String, dynamic> toMap() {
     return {
@@ -27,6 +33,7 @@ class Factory {
       'active': active,
       'efficiency': efficiency,
       'lastProduction': lastProduction.toIso8601String(),
+      'lastUpkeepPaid': lastUpkeepPaid.toIso8601String(),
     };
   }
 
@@ -37,6 +44,9 @@ class Factory {
       active: map['active'],
       efficiency: map['efficiency'],
       lastProduction: DateTime.parse(map['lastProduction']),
+      lastUpkeepPaid: map['lastUpkeepPaid'] != null
+          ? DateTime.parse(map['lastUpkeepPaid'])
+          : DateTime.parse(map['lastProduction']),
     );
   }
   void update(Warehouse warehouse) {

@@ -53,18 +53,26 @@ extension FactoryTypeData on FactoryType {
       return ResourceType.lumber;
   }
 }
-int get inputAmount {
-
-  switch(this){
-
-    case FactoryType.forest:
-      return 0;
-
-    case FactoryType.lumberMill:
-      return 10;
-
-    case FactoryType.furnitureFactory:
-      return 10;
+  int get inputAmount {
+    switch(this){
+      case FactoryType.forest:
+        return 0;
+      case FactoryType.lumberMill:
+        return 10;
+      case FactoryType.furnitureFactory:
+        return 10;
+    }
   }
-}
+
+  /// Upkeep cost deducted from player money per production cycle.
+  int get upkeepCost {
+    switch(this){
+      case FactoryType.forest:
+        return 50;
+      case FactoryType.lumberMill:
+        return 150;
+      case FactoryType.furnitureFactory:
+        return 400;
+    }
+  }
 }

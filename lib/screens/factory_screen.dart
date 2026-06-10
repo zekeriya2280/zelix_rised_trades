@@ -132,11 +132,11 @@ class _FactoryScreenState extends State<FactoryScreen> {
   String _getFactoryDescription(FactoryType type) {
     switch (type) {
       case FactoryType.forest:
-        return 'Produces 5 Wood every ${type.productionSeconds}s';
+        return 'Produces 5 Wood every ${type.productionSeconds}s · Upkeep ¥${type.upkeepCost}';
       case FactoryType.lumberMill:
-        return 'Converts 10 Wood → 5 Lumber every ${type.productionSeconds}s';
+        return 'Converts 10 Wood → 5 Lumber every ${type.productionSeconds}s · Upkeep ¥${type.upkeepCost}';
       case FactoryType.furnitureFactory:
-        return 'Converts 10 Lumber → 2 Furniture every ${type.productionSeconds}s';
+        return 'Converts 10 Lumber → 2 Furniture every ${type.productionSeconds}s · Upkeep ¥${type.upkeepCost}';
     }
   }
 

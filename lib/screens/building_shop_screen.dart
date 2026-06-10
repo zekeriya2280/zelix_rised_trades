@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:zelix_rised_trades/core/engine/game_engine.dart';
 import 'package:zelix_rised_trades/core/models/building.dart';
 import 'package:zelix_rised_trades/core/models/factory.dart';
 import 'package:zelix_rised_trades/core/models/player.dart';
@@ -16,6 +17,7 @@ class BuildingShopScreen extends StatefulWidget {
 
 class _BuildingShopScreenState extends State<BuildingShopScreen> {
   int money = 100000;
+  final GameEngine _engine = GameEngine();
   List<Map<String, dynamic>> purchases = [];
   bool isLoading = true;
 
@@ -51,32 +53,30 @@ class _BuildingShopScreenState extends State<BuildingShopScreen> {
       cost: 50000,
     ),
   ];
+
   @override
   initState() {
     super.initState();
+    // Listen to GameEngine's real-time player money from Firebase
+    _engine.playerNotifier.addListener(_onPlayerChanged);
     _loadData();
   }
 
-  Future<void> _loadData() async {
-    await Future.wait([
-      _loadPlayer(),
-      _loadPurchases(),
-    ]);
+  @override
+  void dispose() {
+    _engine.playerNotifier.removeListener(_onPlayerChanged);
+    super.dispose();
   }
 
-  Future<void> _loadPlayer() async {
-    try {
-      final player = await FirestoreService()
-          .getPlayer()
-          .timeout(const Duration(seconds: 10));
-      if (mounted && player != null) {
-        setState(() {
-          money = player.money;
-        });
-      }
-    } catch (e) {
-      print('Player loading failed: $e');
-    }
+  void _onPlayerChanged() {
+    if (!mounted) return;
+    setState(() {
+      money = _engine.playerNotifier.value.money;
+    });
+  }
+
+  Future<void> _loadData() async {
+    await _loadPurchases();
   }
 
   Future<void> _savePlayer() async {
