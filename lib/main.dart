@@ -1,6 +1,7 @@
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
 
+import 'core/engine/game_engine.dart';
 import 'core/services/firestore_service.dart';
 import 'screens/building_shop_screen.dart';
 
@@ -15,6 +16,10 @@ void main() async {
     // The app will still function, but Firebase features won't be available.
     debugPrint('Firebase initialization failed: $e');
   }
+
+  // Start the game engine (singleton) – it will stream factory & warehouse
+  // data from Firebase every second and run auto-production logic.
+  GameEngine().start();
 
   runApp(MyApp());
 }

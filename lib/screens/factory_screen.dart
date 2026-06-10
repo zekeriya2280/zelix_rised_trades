@@ -1,5 +1,5 @@
-import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:zelix_rised_trades/core/engine/game_engine.dart';
 import 'package:zelix_rised_trades/core/enums/factory_type.dart';
 import 'package:zelix_rised_trades/core/enums/resource_type.dart';
 import 'package:zelix_rised_trades/core/models/factory.dart';
@@ -21,61 +21,62 @@ class FactoryScreen extends StatefulWidget {
 
 class _FactoryScreenState extends State<FactoryScreen> {
   final FirestoreService _firestore = FirestoreService();
+  final GameEngine _engine = GameEngine();
   List<Factory> _factories = [];
   Warehouse? _warehouse;
   bool _isLoading = true;
-  Timer? _productionTimer;
 
   @override
   void initState() {
     super.initState();
-    _loadData();
-    // Timer ticks every 1 second for sliders AND auto-production
-    _productionTimer = Timer.periodic(const Duration(seconds: 1), (_) {
-      _tick();
-    });
+    // Subscribe to GameEngine's reactive notifiers instead of using local timers.
+    // The engine streams factories & warehouses from Firebase in real-time.
+    _engine.factoriesNotifier.addListener(_onFactoriesChanged);
+    _engine.warehousesNotifier.addListener(_onWarehousesChanged);
+    _engine.tickNotifier.addListener(_onTick);
+    _ensureWarehouseExists();
   }
 
   @override
   void dispose() {
-    _productionTimer?.cancel();
+    _engine.factoriesNotifier.removeListener(_onFactoriesChanged);
+    _engine.warehousesNotifier.removeListener(_onWarehousesChanged);
+    _engine.tickNotifier.removeListener(_onTick);
     super.dispose();
   }
 
-  Future<void> _loadData() async {
-    await Future.wait([
-      _loadFactories(),
-      _loadWarehouse(),
-    ]);
-    if (mounted) {
+  void _onFactoriesChanged() {
+    if (!mounted) return;
+    setState(() {
+      _factories = _engine.factoriesNotifier.value;
+    });
+  }
+
+  void _onWarehousesChanged() {
+    if (!mounted) return;
+    final warehouses = _engine.warehousesNotifier.value;
+    _warehouse = warehouses[widget.warehouseId];
+    // If we have data, we're no longer loading
+    if (_isLoading && _warehouse != null) {
       setState(() {
         _isLoading = false;
       });
     }
   }
 
-  Future<void> _loadFactories() async {
-    try {
-      final factories = await _firestore
-          .getAllFactories()
-          .timeout(const Duration(seconds: 10));
-      if (mounted) {
-        setState(() {
-          _factories = factories;
-        });
-      }
-    } catch (e) {
-      print('Factories loading failed: $e');
-    }
+  /// Called on every 1s engine tick to update progress bars / sliders.
+  void _onTick() {
+    if (mounted) setState(() {});
   }
 
-  Future<void> _loadWarehouse() async {
+  /// Ensure the warehouse exists in Firebase. The engine's listeners will pick
+  /// it up once saved.
+  Future<void> _ensureWarehouseExists() async {
     try {
       Warehouse? warehouse = await _firestore
           .getWarehouse(widget.warehouseId)
           .timeout(const Duration(seconds: 10));
-      
-      // If warehouse doesn't exist yet, create a default one
+
       if (warehouse == null) {
         warehouse = Warehouse(
           id: widget.warehouseId,
@@ -89,10 +90,11 @@ class _FactoryScreenState extends State<FactoryScreen> {
         );
         await _firestore.saveWarehouse(warehouse);
       }
-      
+
+      // Mark loading complete regardless
       if (mounted) {
         setState(() {
-          _warehouse = warehouse;
+          _isLoading = false;
         });
       }
     } catch (e) {
@@ -110,59 +112,9 @@ class _FactoryScreenState extends State<FactoryScreen> {
               ResourceType.furniture: 0,
             },
           );
+          _isLoading = false;
         });
       }
-    }
-  }
-
-  Future<void> _saveFactories() async {
-    for (final factory in _factories) {
-      await _firestore.saveFactory(factory);
-    }
-  }
-
-  Future<void> _saveWarehouse() async {
-    if (_warehouse == null) return;
-    await _firestore.saveWarehouse(_warehouse!);
-    await _firestore.updateWarehouseStock(
-      _warehouse!.id,
-      _warehouse!.stock.map((key, value) => MapEntry(key.name, value)),
-    );
-  }
-
-  /// Called every 1 second: updates sliders + runs auto-production
-  void _tick() {
-    if (_warehouse == null) return;
-
-    bool anyProduced = false;
-    for (final factory in _factories) {
-      if (!factory.active) continue;
-
-      final elapsed =
-          DateTime.now().difference(factory.lastProduction).inSeconds;
-      if (elapsed < factory.type.productionSeconds) continue;
-
-      // Check if enough input resources
-      if (factory.type.input != null) {
-        if (_warehouse!.get(factory.type.input!) <
-            factory.type.inputAmount) {
-          continue; // Skip if not enough input
-        }
-      }
-
-      // Run production
-      factory.update(_warehouse!);
-      anyProduced = true;
-    }
-
-    if (anyProduced) {
-      _saveFactories();
-      _saveWarehouse();
-    }
-
-    // Always rebuild to update sliders every second
-    if (mounted) {
-      setState(() {});
     }
   }
 
@@ -193,6 +145,21 @@ class _FactoryScreenState extends State<FactoryScreen> {
       factory.active = !factory.active;
     });
     await _firestore.saveFactory(factory);
+  }
+
+  Future<void> _saveFactories() async {
+    for (final factory in _factories) {
+      await _firestore.saveFactory(factory);
+    }
+  }
+
+  Future<void> _saveWarehouse() async {
+    if (_warehouse == null) return;
+    await _firestore.saveWarehouse(_warehouse!);
+    await _firestore.updateWarehouseStock(
+      _warehouse!.id,
+      _warehouse!.stock.map((key, value) => MapEntry(key.name, value)),
+    );
   }
 
   void _manualProduce(Factory factory) async {
