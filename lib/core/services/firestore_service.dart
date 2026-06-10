@@ -268,6 +268,10 @@ class FirestoreService {
       for (final doc in warehousesSnapshot.docs) {
         await doc.reference.delete();
       }
+      await firestore.collection('player').doc('main').update({
+        'money': 100000,
+        'lastActive': FieldValue.serverTimestamp(),
+      });
 
       print('FIREBASE RESET COMPLETE - Player data preserved');
     } catch (e) {
