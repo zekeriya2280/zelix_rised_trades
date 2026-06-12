@@ -36,9 +36,9 @@ dependencies:
   cupertino_icons: ^1.0.8
   flutter_riverpod: 
   intl: ^0.20.2
-  cloud_firestore: 
-  firebase_core: ^4.10.0
-
+  hive: ^2.2.3
+  hive_flutter: ^1.1.0
+  
 dev_dependencies:
   flutter_test:
     sdk: flutter

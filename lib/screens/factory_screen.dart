@@ -4,7 +4,7 @@ import 'package:zelix_rised_trades/core/enums/factory_type.dart';
 import 'package:zelix_rised_trades/core/enums/resource_type.dart';
 import 'package:zelix_rised_trades/core/models/factory.dart';
 import 'package:zelix_rised_trades/core/models/warehouse.dart';
-import 'package:zelix_rised_trades/core/services/firestore_service.dart';
+import 'package:zelix_rised_trades/core/services/hive_service.dart';
 import 'package:zelix_rised_trades/screens/building_shop_screen.dart';
 
 class FactoryScreen extends StatefulWidget {
@@ -20,7 +20,7 @@ class FactoryScreen extends StatefulWidget {
 }
 
 class _FactoryScreenState extends State<FactoryScreen> {
-  final FirestoreService _firestore = FirestoreService();
+  final HiveService _hive = HiveService();
   final GameEngine _engine = GameEngine();
   List<Factory> _factories = [];
   Warehouse? _warehouse;
@@ -29,8 +29,7 @@ class _FactoryScreenState extends State<FactoryScreen> {
   @override
   void initState() {
     super.initState();
-    // Subscribe to GameEngine's reactive notifiers instead of using local timers.
-    // The engine streams factories & warehouses from Firebase in real-time.
+    // Subscribe to GameEngine's reactive notifiers.
     _engine.factoriesNotifier.addListener(_onFactoriesChanged);
     _engine.warehousesNotifier.addListener(_onWarehousesChanged);
     _engine.tickNotifier.addListener(_onTick);
@@ -69,13 +68,11 @@ class _FactoryScreenState extends State<FactoryScreen> {
     if (mounted) setState(() {});
   }
 
-  /// Ensure the warehouse exists in Firebase. The engine's listeners will pick
+  /// Ensure the warehouse exists in Hive. The engine's listeners will pick
   /// it up once saved.
   Future<void> _ensureWarehouseExists() async {
     try {
-      Warehouse? warehouse = await _firestore
-          .getWarehouse(widget.warehouseId)
-          .timeout(const Duration(seconds: 10));
+      Warehouse? warehouse = _hive.getWarehouse(widget.warehouseId);
 
       if (warehouse == null) {
         warehouse = Warehouse(
@@ -88,7 +85,7 @@ class _FactoryScreenState extends State<FactoryScreen> {
             ResourceType.furniture: 0,
           },
         );
-        await _firestore.saveWarehouse(warehouse);
+        await _hive.saveWarehouse(warehouse);
       }
 
       // Mark loading complete regardless
@@ -144,19 +141,19 @@ class _FactoryScreenState extends State<FactoryScreen> {
     setState(() {
       factory.active = !factory.active;
     });
-    await _firestore.saveFactory(factory);
+    await _hive.saveFactory(factory);
   }
 
   Future<void> _saveFactories() async {
     for (final factory in _factories) {
-      await _firestore.saveFactory(factory);
+      await _hive.saveFactory(factory);
     }
   }
 
   Future<void> _saveWarehouse() async {
     if (_warehouse == null) return;
-    await _firestore.saveWarehouse(_warehouse!);
-    await _firestore.updateWarehouseStock(
+    await _hive.saveWarehouse(_warehouse!);
+    await _hive.updateWarehouseStock(
       _warehouse!.id,
       _warehouse!.stock.map((key, value) => MapEntry(key.name, value)),
     );

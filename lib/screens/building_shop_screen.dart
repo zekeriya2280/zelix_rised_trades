@@ -3,7 +3,7 @@ import 'package:zelix_rised_trades/core/engine/game_engine.dart';
 import 'package:zelix_rised_trades/core/models/building.dart';
 import 'package:zelix_rised_trades/core/models/factory.dart';
 import 'package:zelix_rised_trades/core/models/player.dart';
-import 'package:zelix_rised_trades/core/services/firestore_service.dart';
+import 'package:zelix_rised_trades/core/services/hive_service.dart';
 import 'package:zelix_rised_trades/core/enums/factory_type.dart';
 import 'package:zelix_rised_trades/screens/factory_screen.dart';
 import 'package:zelix_rised_trades/screens/warehouse_screen.dart';
@@ -18,6 +18,7 @@ class BuildingShopScreen extends StatefulWidget {
 class _BuildingShopScreenState extends State<BuildingShopScreen> {
   int money = 100000;
   final GameEngine _engine = GameEngine();
+  final HiveService _hive = HiveService();
   List<Map<String, dynamic>> purchases = [];
   bool isLoading = true;
 
@@ -57,7 +58,7 @@ class _BuildingShopScreenState extends State<BuildingShopScreen> {
   @override
   initState() {
     super.initState();
-    // Listen to GameEngine's real-time player money from Firebase
+    // Listen to GameEngine's player money from Hive
     _engine.playerNotifier.addListener(_onPlayerChanged);
     _loadData();
   }
@@ -80,14 +81,12 @@ class _BuildingShopScreenState extends State<BuildingShopScreen> {
   }
 
   Future<void> _savePlayer() async {
-    await FirestoreService().savePlayer(Player(nickname: 'Player', money: money));
+    await _hive.savePlayer(Player(nickname: 'Player', money: money));
   }
 
   Future<void> _loadPurchases() async {
     try {
-      final data = await FirestoreService()
-          .getAllPurchases()
-          .timeout(const Duration(seconds: 10));
+      final data = _hive.getAllPurchases();
 
       if (!mounted) return;
 
@@ -97,7 +96,7 @@ class _BuildingShopScreenState extends State<BuildingShopScreen> {
       });
 
       if (purchases.isEmpty) {
-        print('No purchases found in Firestore.');
+        print('No purchases found in Hive.');
         return;
       }
       for (final purchase in purchases) {
@@ -114,7 +113,7 @@ class _BuildingShopScreenState extends State<BuildingShopScreen> {
         if (mounted) setState(() {});
       }
     } catch (e) {
-      print('Firestore loading failed: $e');
+      print('Hive loading failed: $e');
       if (mounted) {
         setState(() {
           isLoading = false;
@@ -140,10 +139,10 @@ class _BuildingShopScreenState extends State<BuildingShopScreen> {
       building.count++;
       building.cost = (building.cost * 1.3).round();
     });
-    await FirestoreService().updatePurchasedBuildings(building);
-    await _savePlayer(); // Save player money to Firestore
+    await _hive.updatePurchasedBuildings(building);
+    await _savePlayer(); // Save player money to Hive
 
-    // If the purchased building is a factory type, save it to the factories collection
+    // If the purchased building is a factory type, save it to the factories box
     FactoryType? factoryType;
     switch (building.name) {
       case 'Forest':
@@ -168,8 +167,11 @@ class _BuildingShopScreenState extends State<BuildingShopScreen> {
           Duration(seconds: factoryType.productionSeconds),
         ), // Start ready to produce
       );
-      await FirestoreService().saveFactory(factory);
+      await _hive.saveFactory(factory);
     }
+
+    // Print the full Hive database state after purchase
+    _hive.printHiveState();
 
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
@@ -205,7 +207,7 @@ class _BuildingShopScreenState extends State<BuildingShopScreen> {
     );
 
     if (confirmed == true) {
-      await FirestoreService().resetAll();
+      await _hive.resetAll();
       setState(() {
         money = 100000;
         for (final building in buildings) {
@@ -213,6 +215,8 @@ class _BuildingShopScreenState extends State<BuildingShopScreen> {
         }
       });
       await _loadPurchases();
+      // Print Hive state after reset
+      _hive.printHiveState();
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
@@ -243,7 +247,6 @@ class _BuildingShopScreenState extends State<BuildingShopScreen> {
               ),
             ),
           ),
-          
         ),
         body: Column(
           mainAxisSize: MainAxisSize.max,

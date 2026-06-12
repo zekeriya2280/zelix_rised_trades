@@ -1,22 +1,18 @@
 plugins {
     id("com.android.application")
     // The Flutter Gradle Plugin must be applied after the Android and Kotlin Gradle plugins.
-    id("com.google.gms.google-services")
     id("dev.flutter.flutter-gradle-plugin")
 }
-dependencies {
-  // Import the Firebase BoM
-    implementation(platform("com.google.firebase:firebase-bom:34.14.0"))
 
-
-  // TODO: Add the dependencies for Firebase products you want to use
-  // When using the BoM, don't specify versions in Firebase dependencies
-    implementation("com.google.firebase:firebase-analytics")
-
-
-  // Add the dependencies for any other desired Firebase products
-  // https://firebase.google.com/docs/android/setup#available-libraries
+// Force ALL subprojects (including jni, path_provider_android etc.) to use NDK 30
+subprojects {
+    afterEvaluate {
+        android {
+            ndkVersion = "30.0.14904198"
+        }
+    }
 }
+
 android {
     namespace = "com.zelix_rised_trades"
     compileSdk = flutter.compileSdkVersion

@@ -3,7 +3,7 @@ import 'package:zelix_rised_trades/screens/building_shop_screen.dart';
 import 'package:zelix_rised_trades/screens/factory_screen.dart';
 import '../core/enums/resource_type.dart';
 import '../core/models/warehouse.dart';
-import '../core/services/firestore_service.dart';
+import '../core/services/hive_service.dart';
 
 class WarehouseScreen extends StatefulWidget {
   final String warehouseId;
@@ -15,7 +15,21 @@ class WarehouseScreen extends StatefulWidget {
 }
 
 class _WarehouseScreenState extends State<WarehouseScreen> {
-  final FirestoreService _firestore = FirestoreService();
+  final HiveService _hive = HiveService();
+
+  Warehouse? _warehouse;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadWarehouse();
+  }
+
+  void _loadWarehouse() {
+    setState(() {
+      _warehouse = _hive.getWarehouse(widget.warehouseId);
+    });
+  }
 
   String _getResourceEmoji(ResourceType type) {
     switch (type) {
@@ -340,46 +354,28 @@ class _WarehouseScreenState extends State<WarehouseScreen> {
           ),
         ],
         title: Center(
-          child: StreamBuilder<Warehouse?>(
-            stream: _firestore.warehouseStream(widget.warehouseId),
-            builder: (context, snapshot) {
-              final name = snapshot.data?.name ?? 'Warehouse';
-              return Text(
-                name,
-                style: const TextStyle(
-                  color: Colors.black87,
-                  fontWeight: FontWeight.bold,
-                  fontSize: 30,
-                  letterSpacing: 1.5,
-                  fontStyle: FontStyle.italic,
-                  shadows: [
-                    Shadow(
-                      offset: Offset(2, 2),
-                      blurRadius: 3,
-                      color: Colors.grey,
-                    ),
-                  ],
+          child: Text(
+            _warehouse?.name ?? 'Warehouse',
+            style: const TextStyle(
+              color: Colors.black87,
+              fontWeight: FontWeight.bold,
+              fontSize: 30,
+              letterSpacing: 1.5,
+              fontStyle: FontStyle.italic,
+              shadows: [
+                Shadow(
+                  offset: Offset(2, 2),
+                  blurRadius: 3,
+                  color: Colors.grey,
                 ),
-              );
-            },
+              ],
+            ),
           ),
         ),
       ),
-      body: StreamBuilder<Warehouse?>(
-        stream: _firestore.warehouseStream(widget.warehouseId),
-        builder: (context, snapshot) {
-          if (snapshot.connectionState == ConnectionState.waiting) {
-            return const Center(child: CircularProgressIndicator());
-          }
-
-          final warehouse = snapshot.data;
-          if (warehouse == null || !snapshot.hasData) {
-            return const Center(child: Text('Warehouse not found'));
-          }
-
-          return _buildContent(warehouse);
-        },
-      ),
+      body: _warehouse == null
+          ? const Center(child: CircularProgressIndicator())
+          : _buildContent(_warehouse!),
     );
   }
 }

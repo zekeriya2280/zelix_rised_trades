@@ -1,24 +1,23 @@
-import 'package:firebase_core/firebase_core.dart';
+import 'dart:io';
+
 import 'package:flutter/material.dart';
+import 'package:hive/hive.dart';
 
 import 'core/engine/game_engine.dart';
-import 'core/services/firestore_service.dart';
+import 'core/services/hive_service.dart';
 import 'screens/building_shop_screen.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  try {
-    await Firebase.initializeApp();
-    FirestoreService.markFirebaseAvailable();
-  } catch (e) {
-    // Firebase initialization may fail on emulators without Google Play Services.
-    // The app will still function, but Firebase features won't be available.
-    debugPrint('Firebase initialization failed: $e');
-  }
+  // Initialize Hive using system temp directory (writable on all platforms)
+  // No native plugins needed - pure Dart with no NDK requirement!
+  final hiveDir = Directory.systemTemp.path;
+  Hive.init(hiveDir);
+  await HiveService().init();
 
-  // Start the game engine (singleton) – it will stream factory & warehouse
-  // data from Firebase every second and run auto-production logic.
+  // Start the game engine (singleton) – it will manage factory & warehouse
+  // data locally and run auto-production logic.
   GameEngine().start();
 
   runApp(MyApp());
