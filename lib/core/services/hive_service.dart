@@ -105,6 +105,15 @@ class HiveService {
     print('PURCHASE LOGGED TO HIVE: ${building.name} x${building.count}');
   }
 
+  /// Saves just the building name and count (used by SaveSystem without Building object)
+  Future<void> savePurchasedBuildingData(String name, int count) async {
+    await _purchases.put(name, jsonEncode({
+      'building': name,
+      'cost': 0,
+      'count': count,
+    }));
+  }
+
   List<Map<String, dynamic>> getAllPurchases() {
     return _purchases.values.map((raw) {
       return jsonDecode(raw) as Map<String, dynamic>;

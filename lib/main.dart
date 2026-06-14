@@ -11,16 +11,15 @@ void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
   // Initialize Hive using system temp directory (writable on all platforms)
-  // No native plugins needed - pure Dart with no NDK requirement!
   final hiveDir = Directory.systemTemp.path;
   Hive.init(hiveDir);
   await HiveService().init();
 
-  // Start the game engine (singleton) – it will manage factory & warehouse
-  // data locally and run auto-production logic.
+  // Start the game engine – manages all systems (factory, warehouse, player, etc.)
+  // UI communicates ONLY through GameEngine, never directly with HiveService.
   GameEngine().start();
 
-  runApp(MyApp());
+  runApp(const MyApp());
 }
 
 class MyApp extends StatelessWidget {

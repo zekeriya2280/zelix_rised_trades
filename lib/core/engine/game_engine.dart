@@ -3,65 +3,101 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 
 import '../enums/factory_type.dart';
+import '../enums/resource_type.dart';
 import '../models/factory.dart' as models;
 import '../models/player.dart';
 import '../models/warehouse.dart';
-import '../services/hive_service.dart';
+import 'game_state.dart';
+import 'systems/city_system.dart';
+import 'systems/factory_system.dart';
+import 'systems/i_system.dart';
+import 'systems/player_system.dart';
+import 'systems/route_system.dart';
+import 'systems/save_system.dart';
+import 'systems/truck_system.dart';
+import 'systems/warehouse_system.dart';
 
-/// Singleton game engine that:
-/// - Ticks every 1 second
-/// - Reads factories, warehouses & player from Hive local storage
-/// - Runs auto-production logic on each tick
-/// - Deducts upkeep cost from player money per production cycle
-/// - Saves production results back to Hive
-/// - Exposes reactive notifiers for UI widgets to consume
+/// Ana oyun motoru.
+/// 
+/// Tüm sistemleri yönetir, tick döngüsünü çalıştırır,
+/// UI'a tek erişim noktası sağlar.
+/// 
+/// UI ASLA doğrudan HiveService veya sistemlere erişmez.
+/// Her şey bu merkez üzerinden yapılır.
 class GameEngine {
   // ---- Singleton ----
   static final GameEngine _instance = GameEngine._internal();
   factory GameEngine() => _instance;
   GameEngine._internal();
 
-  // ---- Services ----
-  final HiveService _hive = HiveService();
-
   // ---- Timer ----
   Timer? _timer;
-
-  // ---- Reactive state ----
-
-  /// Holds the latest list of factories, refreshed from Hive on each tick.
-  final ValueNotifier<List<models.Factory>> factoriesNotifier =
-      ValueNotifier<List<models.Factory>>([]);
-
-  /// Holds the latest warehouse map keyed by warehouse ID.
-  final ValueNotifier<Map<String, Warehouse>> warehousesNotifier =
-      ValueNotifier<Map<String, Warehouse>>({});
-
-  /// Holds the latest player data from Hive.
-  final ValueNotifier<Player> playerNotifier =
-      ValueNotifier<Player>(Player(nickname: 'Player', money: 100000));
-
-  /// Fires every 1-second tick (even when no production occurs).
-  /// UI screens can listen to this to update progress sliders etc.
-  final ValueNotifier<int> tickNotifier = ValueNotifier<int>(0);
-
-  /// Whether the engine is currently running.
   bool _running = false;
   bool get isRunning => _running;
 
+  // ---- Systems ----
+  late final PlayerSystem playerSystem;
+  late final FactorySystem factorySystem;
+  late final WarehouseSystem warehouseSystem;
+  late final TruckSystem truckSystem;
+  late final RouteSystem routeSystem;
+  late final CitySystem citySystem;
+  late final SaveSystem saveSystem;
+
+  /// Tüm sistemlerin listesi (sıralı tick için)
+  late final List<ISystem> _systems;
+
+  // ---- Central Game State ----
+  GameState _state = GameState(
+    player: Player(nickname: 'Player', money: 10000000),
+  );
+
+  /// Mevcut state (UI tarafından okunur, asla direkt değiştirilmez)
+  GameState get state => _state;
+
+  // ---- Reactive Notifiers (UI için) ----
+
+  /// Her tick'te tetiklenir (UI progress bar güncellemesi için)
+  final ValueNotifier<int> tickNotifier = ValueNotifier<int>(0);
+
+  /// State değiştiğinde tetiklenir (UI yeniden çizim için)
+  final ValueNotifier<int> stateVersion = ValueNotifier<int>(0);
+
+  /// Player para değişimi için
+  final ValueNotifier<int> moneyNotifier = ValueNotifier<int>(100000);
+
+  /// Factory listesi değişimi için
+  final ValueNotifier<List<models.Factory>> factoriesNotifier =
+      ValueNotifier<List<models.Factory>>([]);
+
+  /// Warehouse haritası değişimi için
+  final ValueNotifier<Map<String, Warehouse>> warehousesNotifier =
+      ValueNotifier<Map<String, Warehouse>>({});
+
   // ---- Lifecycle ----
 
-  /// Starts the engine: loads data from Hive and begins the 1s tick.
+  /// Motoru başlat
   void start() {
     if (_running) return;
     _running = true;
 
     debugPrint('[GameEngine] Starting...');
 
-    // Load initial data from Hive
-    _loadFromHive();
+    // Sistemleri oluştur
+    _initSystems();
 
-    // Start the 1-second production tick
+    // State'i Hive'dan yükle
+    _loadState();
+
+    // Sistemleri başlat
+    for (final system in _systems) {
+      system.init(_state);
+    }
+
+    // UI notifier'larını güncelle
+    _syncNotifiers();
+
+    // Tick döngüsünü başlat
     _timer = Timer.periodic(const Duration(seconds: 1), (_) {
       _tick();
     });
@@ -69,137 +105,329 @@ class GameEngine {
     debugPrint('[GameEngine] Started.');
   }
 
-  /// Reload all game state from Hive storage.
-  void _loadFromHive() {
-    // Load player
-    final player = _hive.getPlayer();
-    if (player != null) {
-      playerNotifier.value = player;
+  /// Sistemleri oluştur
+  void _initSystems() {
+    playerSystem = PlayerSystem();
+    factorySystem = FactorySystem();
+    warehouseSystem = WarehouseSystem();
+    truckSystem = TruckSystem();
+    routeSystem = RouteSystem();
+    citySystem = CitySystem();
+    saveSystem = SaveSystem();
+
+    _systems = [
+      playerSystem,
+      factorySystem,
+      warehouseSystem,
+      truckSystem,
+      routeSystem,
+      citySystem,
+      saveSystem,
+    ];
+
+    // ChangeNotifier olan sistemleri dinle
+    for (final system in _systems) {
+      if (system is ChangeNotifier) {
+        (system as ChangeNotifier).addListener(_onSystemChanged);
+      }
     }
+  }
 
-    // Load factories
-    factoriesNotifier.value = _hive.getAllFactories();
+  /// Herhangi bir sistem değiştiğinde UI'ı güncelle
+  void _onSystemChanged() {
+    _syncNotifiers();
+  }
 
-    // Load warehouses
-    final warehouses = _hive.getAllWarehouses();
+  /// UI notifier'larını güncelle
+  void _syncNotifiers() {
+    moneyNotifier.value = _state.player.money;
+    factoriesNotifier.value = List.from(_state.factories);
+
     final warehouseMap = <String, Warehouse>{};
-    for (final w in warehouses) {
+    for (final w in _state.warehouses) {
       warehouseMap[w.id] = w;
     }
     warehousesNotifier.value = warehouseMap;
+
+    stateVersion.value++;
   }
 
-  /// Stops the engine and cleans up.
+  /// State'i Hive'dan yükle
+  void _loadState() {
+    _state = saveSystem.load();
+    debugPrint('[GameEngine] State loaded: ${_state.factories.length} factories, '
+        '${_state.warehouses.length} warehouses');
+  }
+
+  /// Motoru durdur
   void stop() {
     if (!_running) return;
     _running = false;
 
+    saveSystem.save(_state);
+
     _timer?.cancel();
     _timer = null;
+
+    for (final system in _systems) {
+      if (system is ChangeNotifier) {
+        (system as ChangeNotifier).removeListener(_onSystemChanged);
+      }
+    }
 
     debugPrint('[GameEngine] Stopped.');
   }
 
-  // ---- Production tick ----
-
-  /// Called every 1 second. Runs auto-production for all active factories
-  /// and deducts upkeep costs from player money.
+  /// Her saniye çalışan tick
   void _tick() {
-    // Notify UI listeners every second (for progress sliders etc.)
     tickNotifier.value++;
 
-    // Re-load fresh data from Hive each tick
-    _loadFromHive();
-
-    final factories = factoriesNotifier.value;
-    if (factories.isEmpty) return;
-
-    final warehouses = warehousesNotifier.value;
-    if (warehouses.isEmpty) return;
-
-    bool anyProduced = false;
-    bool anyUpkeepDeducted = false;
-    int totalUpkeepCost = 0;
-
-    for (final factory in factories) {
-      if (!factory.active) continue;
-
-      // Determine which warehouse this factory uses.
-      Warehouse? warehouse;
-      final prefix = factory.id.split('_').first;
-      if (warehouses.containsKey(prefix)) {
-        warehouse = warehouses[prefix];
-      } else if (warehouses.isNotEmpty) {
-        warehouse = warehouses.values.first;
-      }
-
-      if (warehouse == null) continue;
-
-      final elapsed =
-          DateTime.now().difference(factory.lastProduction).inSeconds;
-      if (elapsed < factory.type.productionSeconds) continue;
-
-      // Check if enough input resources
-      if (factory.type.input != null) {
-        if (warehouse.get(factory.type.input!) < factory.type.inputAmount) {
-          continue; // Skip if not enough input
-        }
-      }
-
-      // --- UPKEEP: Deduct once per production cycle ---
-      final upkeepElapsed =
-          DateTime.now().difference(factory.lastUpkeepPaid).inSeconds;
-      if (upkeepElapsed >= factory.type.productionSeconds) {
-        factory.lastUpkeepPaid = DateTime.now();
-        totalUpkeepCost += factory.type.upkeepCost;
-        anyUpkeepDeducted = true;
-      }
-
-      // Run production
-      factory.update(warehouse);
-      anyProduced = true;
+    for (final system in _systems) {
+      system.update(_state);
     }
 
-    // Apply upkeep deductions to player money
-    if (anyUpkeepDeducted && totalUpkeepCost > 0) {
-      final currentPlayer = playerNotifier.value;
-      final newMoney =
-          (currentPlayer.money - totalUpkeepCost).clamp(0, 999999999);
-      currentPlayer.money = newMoney;
-      playerNotifier.value = currentPlayer; // triggers UI update
-      _hive.savePlayer(currentPlayer);
-    }
-
-    if (anyProduced) {
-      _saveFactories(factories);
-      _saveAllWarehouses(warehouses);
+    final totalUpkeep = factorySystem.totalUpkeepThisCycle;
+    if (totalUpkeep > 0) {
+      playerSystem.deductUpkeep(_state, totalUpkeep);
     }
   }
 
-  // ---- Persistence ----
+  // ==================== UI API ====================
 
-  Future<void> _saveFactories(List<models.Factory> factories) async {
-    for (final factory in factories) {
-      await _hive.saveFactory(factory);
+  // ---- Player ----
+
+  bool canAfford(int cost) => playerSystem.canAfford(_state, cost);
+
+  /// Oyuncu parasını düş (factory/warehouse satın alımı için)
+  bool deductMoney(int cost) {
+    return playerSystem.deductMoney(_state, cost);
+  }
+
+  // ---- Factory ----
+
+  /// Yeni factory satın al (para otomatik düşer)
+  models.Factory? buyFactory(FactoryType type) {
+    // Önce maliyeti kontrol et
+    final cost = _getFactoryCost(type);
+    if (!canAfford(cost)) return null;
+
+    // Parayı düş
+    deductMoney(cost);
+
+    // Factory'yi ekle
+    final factory = factorySystem.buyFactory(_state, type);
+    saveSystem.save(_state);
+    return factory;
+  }
+
+  /// Factory tipine göre maliyet hesapla
+  int _getFactoryCost(FactoryType type) {
+    switch (type) {
+      case FactoryType.forest:
+        return 5000;
+      case FactoryType.lumberMill:
+        return 15000;
+      case FactoryType.furnitureFactory:
+        return 30000;
     }
   }
 
-  Future<void> _saveAllWarehouses(Map<String, Warehouse> warehouses) async {
-    for (final warehouse in warehouses.values) {
-      await _hive.saveWarehouse(warehouse);
-      await _hive.updateWarehouseStock(
-        warehouse.id,
-        warehouse.stock.map((key, value) => MapEntry(key.name, value)),
-      );
-    }
+  void toggleFactory(String factoryId) {
+    factorySystem.toggleFactory(_state, factoryId);
+    saveSystem.save(_state);
+  }
+
+  List<models.Factory> getFactories() => factorySystem.getFactories(_state);
+
+  // ---- Warehouse ----
+
+  Warehouse ensureWarehouseExists({
+    required String id,
+    required String name,
+    required int capacity,
+  }) {
+    final warehouse = warehouseSystem.ensureWarehouseExists(
+      _state,
+      id: id,
+      name: name,
+      capacity: capacity,
+    );
+    saveSystem.save(_state);
+    return warehouse;
+  }
+
+  bool addResourceToWarehouse(
+    String warehouseId,
+    ResourceType type,
+    int amount, {
+    String reason = 'manual',
+  }) {
+    final result = warehouseSystem.addResource(
+      _state, warehouseId, type, amount, reason: reason,
+    );
+    if (result) saveSystem.save(_state);
+    return result;
+  }
+
+  bool removeResourceFromWarehouse(
+    String warehouseId,
+    ResourceType type,
+    int amount, {
+    String reason = 'manual',
+  }) {
+    final result = warehouseSystem.removeResource(
+      _state, warehouseId, type, amount, reason: reason,
+    );
+    if (result) saveSystem.save(_state);
+    return result;
+  }
+
+  bool transferResource(
+    String fromWarehouseId,
+    String toWarehouseId,
+    ResourceType type,
+    int amount, {
+    String reason = 'transfer',
+  }) {
+    final result = warehouseSystem.transferResource(
+      _state, fromWarehouseId, toWarehouseId, type, amount, reason: reason,
+    );
+    if (result) saveSystem.save(_state);
+    return result;
+  }
+
+  void upgradeWarehouseCapacity(String warehouseId, int additionalCapacity) {
+    warehouseSystem.upgradeCapacity(_state, warehouseId, additionalCapacity);
+    saveSystem.save(_state);
+  }
+
+  Warehouse? getWarehouse(String id) => _state.getWarehouse(id);
+
+  List<Warehouse> getAllWarehouses() =>
+      warehouseSystem.getAllWarehouses(_state);
+
+  // ---- Truck ----
+
+  void createTruck({
+    required String id,
+    required String routeId,
+    int capacity = 100,
+  }) {
+    truckSystem.createTruck(
+      _state,
+      id: id,
+      routeId: routeId,
+      capacity: capacity,
+    );
+    saveSystem.save(_state);
+  }
+
+  void assignTruckRoute(String truckId, String routeId) {
+    truckSystem.assignRoute(_state, truckId, routeId);
+    saveSystem.save(_state);
+  }
+
+  void requestShipment({
+    required String fromWarehouseId,
+    required String toWarehouseId,
+    required ResourceType resourceType,
+    required int amount,
+    String reason = 'transport',
+  }) {
+    truckSystem.requestShipment(
+      _state,
+      fromWarehouseId: fromWarehouseId,
+      toWarehouseId: toWarehouseId,
+      resourceType: resourceType,
+      amount: amount,
+      reason: reason,
+    );
+  }
+
+  // ---- Route ----
+
+  void createRoute({
+    required String id,
+    required String source,
+    required String destination,
+    int trucks = 0,
+  }) {
+    routeSystem.createRoute(
+      _state,
+      id: id,
+      source: source,
+      destination: destination,
+      trucks: trucks,
+    );
+    saveSystem.save(_state);
+  }
+
+  void deleteRoute(String routeId) {
+    routeSystem.deleteRoute(_state, routeId);
+    saveSystem.save(_state);
+  }
+
+  // ---- City ----
+
+  void createCity({
+    required String id,
+    required String name,
+    Map<ResourceType, int>? demand,
+  }) {
+    citySystem.createCity(
+      _state,
+      id: id,
+      name: name,
+      demand: demand,
+    );
+    saveSystem.save(_state);
+  }
+
+  // ---- Building Shop ----
+
+  /// Building satın al - count kalıcı olarak GameState'te saklanır
+  int getBuildingCount(String buildingName) {
+    return _state.purchasedBuildings[buildingName] ?? 0;
+  }
+
+  /// Building satın alındığında count'u artır ve yeni fiyatı döndür
+  int incrementBuildingCount(String buildingName, int currentCost) {
+    final count = (_state.purchasedBuildings[buildingName] ?? 0) + 1;
+    _state.purchasedBuildings[buildingName] = count;
+    final newCost = (currentCost * 1.3).round();
+    saveSystem.save(_state);
+    _syncNotifiers();
+    return newCost;
+  }
+
+  // ---- Save / Load ----
+
+  Future<void> saveGame() async {
+    await saveSystem.save(_state);
+  }
+
+  Future<void> resetGame() async {
+    _state = await saveSystem.resetAll();
+    _syncNotifiers();
+    debugPrint('[GameEngine] Game has been reset');
+  }
+
+  void printDebugState() {
+    saveSystem.printDebugState(_state);
   }
 
   // ---- Cleanup ----
+
   void dispose() {
     stop();
+    tickNotifier.dispose();
+    stateVersion.dispose();
+    moneyNotifier.dispose();
     factoriesNotifier.dispose();
     warehousesNotifier.dispose();
-    playerNotifier.dispose();
-    tickNotifier.dispose();
+
+    for (final system in _systems) {
+      system.dispose();
+    }
   }
 }

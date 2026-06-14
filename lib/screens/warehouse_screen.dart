@@ -1,10 +1,12 @@
 import 'package:flutter/material.dart';
+import 'package:hive_flutter/hive_flutter.dart';
+import 'package:zelix_rised_trades/core/engine/game_engine.dart';
+import 'package:zelix_rised_trades/core/enums/resource_type.dart';
+import 'package:zelix_rised_trades/core/models/warehouse.dart';
 import 'package:zelix_rised_trades/screens/building_shop_screen.dart';
 import 'package:zelix_rised_trades/screens/factory_screen.dart';
-import '../core/enums/resource_type.dart';
-import '../core/models/warehouse.dart';
-import '../core/services/hive_service.dart';
 
+/// Warehouse Screen - Tüm warehouse'ları listeler, üstte toplu özet gösterir.
 class WarehouseScreen extends StatefulWidget {
   final String warehouseId;
 
@@ -15,317 +17,255 @@ class WarehouseScreen extends StatefulWidget {
 }
 
 class _WarehouseScreenState extends State<WarehouseScreen> {
-  final HiveService _hive = HiveService();
-
-  Warehouse? _warehouse;
+  final GameEngine _engine = GameEngine();
+  List<Warehouse> _allWarehouses = [];
+  String? _selectedWarehouseId;
+  bool _confirmedEmpty = false;
 
   @override
   void initState() {
     super.initState();
-    _loadWarehouse();
-  }
+    _engine.warehousesNotifier.addListener(_onDataChanged);
+    _engine.stateVersion.addListener(_onDataChanged);
 
-  void _loadWarehouse() {
-    setState(() {
-      _warehouse = _hive.getWarehouse(widget.warehouseId);
-    });
-  }
+    _allWarehouses = _engine.getAllWarehouses();
 
-  String _getResourceEmoji(ResourceType type) {
-    switch (type) {
-      case ResourceType.wood:
-        return '🌲';
-      case ResourceType.lumber:
-        return '🪚';
-      case ResourceType.furniture:
-        return '🪑';
+    if (_allWarehouses.isEmpty) {
+      _checkHiveDirectly();
+    } else {
+      _selectInitialWarehouse();
     }
   }
 
-  Color _getResourceColor(ResourceType type) {
-    switch (type) {
-      case ResourceType.wood:
-        return Colors.green;
-      case ResourceType.lumber:
-        return Colors.brown;
-      case ResourceType.furniture:
-        return Colors.orange;
+  void _checkHiveDirectly() {
+    try {
+      if (Hive.isBoxOpen('warehouses_box')) {
+        final box = Hive.box('warehouses_box');
+        if (box.isEmpty) _confirmedEmpty = true;
+      }
+    } catch (_) {}
+    if (mounted) setState(() {});
+  }
+
+  void _selectInitialWarehouse() {
+    _selectedWarehouseId = widget.warehouseId;
+    if (!_allWarehouses.any((w) => w.id == _selectedWarehouseId)) {
+      _selectedWarehouseId = _allWarehouses.isNotEmpty ? _allWarehouses.first.id : null;
     }
   }
 
-  Widget _resourceCard(ResourceType type, int amount, int capacity) {
-    final color = _getResourceColor(type);
+  @override
+  void dispose() {
+    _engine.warehousesNotifier.removeListener(_onDataChanged);
+    _engine.stateVersion.removeListener(_onDataChanged);
+    super.dispose();
+  }
+
+  void _onDataChanged() {
+    if (!mounted) return;
+    final current = _engine.getAllWarehouses();
+    if (current.isNotEmpty || _allWarehouses.isEmpty) {
+      setState(() {
+        _allWarehouses = current;
+        if (current.isEmpty) {
+          _confirmedEmpty = true;
+        } else if (_selectedWarehouseId == null || !current.any((w) => w.id == _selectedWarehouseId)) {
+          _selectedWarehouseId = current.first.id;
+        }
+      });
+    }
+  }
+
+  // ---- Özet Hesaplamaları ----
+
+  int get _totalWood => _allWarehouses.fold(0, (s, w) => s + w.get(ResourceType.wood));
+  int get _totalLumber => _allWarehouses.fold(0, (s, w) => s + w.get(ResourceType.lumber));
+  int get _totalFurniture => _allWarehouses.fold(0, (s, w) => s + w.get(ResourceType.furniture));
+  int get _totalUsed => _allWarehouses.fold(0, (s, w) => s + w.usedCapacity);
+  int get _totalCapacity => _allWarehouses.fold(0, (s, w) => s + w.capacity);
+  double get _totalCapPercent => _totalCapacity > 0 ? _totalUsed / _totalCapacity : 0.0;
+
+  // ---- UI ----
+
+  Color _resColor(ResourceType t) =>
+      switch (t) { ResourceType.wood => Colors.green, ResourceType.lumber => Colors.brown, ResourceType.furniture => Colors.orange };
+
+  String _resEmoji(ResourceType t) =>
+      switch (t) { ResourceType.wood => '🌲', ResourceType.lumber => '🪚', ResourceType.furniture => '🪑' };
+
+  /// Üstteki toplu özet kartı
+  Widget _buildSummaryCard() {
     return Card(
+      margin: const EdgeInsets.fromLTRB(16, 8, 16, 4),
       elevation: 3,
-      margin: const EdgeInsets.symmetric(vertical: 6),
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(16),
-        side: BorderSide(color: color.withValues(alpha: 0.3), width: 1),
-      ),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
-        child: Row(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Container(
-              width: 50,
-              height: 50,
-              decoration: BoxDecoration(
-                color: color.withValues(alpha: 0.1),
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: Center(
-                child: Text(
-                  _getResourceEmoji(type),
-                  style: const TextStyle(fontSize: 28),
+            // Başlık + warehouse sayısı
+            Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(color: Colors.teal.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(10)),
+                  child: const Icon(Icons.inventory_2, color: Colors.teal, size: 22),
                 ),
-              ),
-            ),
-            const SizedBox(width: 16),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    type.name[0].toUpperCase() + type.name.substring(1),
-                    style: TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.bold,
-                      color: Colors.grey[800],
-                    ),
-                  ),
-                  const SizedBox(height: 4),
-                  LinearProgressIndicator(
-                    value: capacity > 0 ? amount / capacity : 0,
-                    minHeight: 6,
-                    backgroundColor: color.withValues(alpha: 0.15),
-                    valueColor: AlwaysStoppedAnimation<Color>(color),
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(width: 16),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-              decoration: BoxDecoration(
-                color: color.withValues(alpha: 0.1),
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: Text(
-                '$amount',
-                style: TextStyle(
-                  fontSize: 20,
-                  fontWeight: FontWeight.bold,
-                  color: type == ResourceType.wood
-                      ? Colors.green[700]
-                      : (type == ResourceType.lumber
-                            ? Colors.brown[700]
-                            : Colors.orange[700]),
-                ),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _logCard(WarehouseLog log) {
-    IconData icon;
-    Color iconColor;
-
-    switch (log.operation) {
-      case 'in':
-        icon = Icons.arrow_downward;
-        iconColor = Colors.green;
-        break;
-      case 'out':
-        icon = Icons.arrow_upward;
-        iconColor = Colors.red;
-        break;
-      default:
-        icon = Icons.info_outline;
-        iconColor = Colors.blue;
-    }
-
-    final time =
-        '${log.timestamp.hour.toString().padLeft(2, '0')}:${log.timestamp.minute.toString().padLeft(2, '0')}:${log.timestamp.second.toString().padLeft(2, '0')}';
-
-    return Card(
-      margin: const EdgeInsets.symmetric(vertical: 4),
-      elevation: 1,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-      child: ListTile(
-        leading: Container(
-          width: 36,
-          height: 36,
-          decoration: BoxDecoration(
-            color: iconColor.withValues(alpha: 0.1),
-            borderRadius: BorderRadius.circular(8),
-          ),
-          child: Icon(icon, color: iconColor, size: 20),
-        ),
-        title: Text(
-          log.reason,
-          style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500),
-        ),
-        subtitle: Row(
-          children: [
-            if (log.type != null) ...[
-              Text(
-                '${_getResourceEmoji(log.type!)} ${log.type!.name}',
-                style: TextStyle(fontSize: 12, color: Colors.grey[600]),
-              ),
-              if (log.amount > 0) ...[
-                const SizedBox(width: 4),
-                Text(
-                  log.operation == 'in' ? '+${log.amount}' : '-${log.amount}',
-                  style: TextStyle(
-                    fontSize: 12,
-                    fontWeight: FontWeight.bold,
-                    color: log.operation == 'in'
-                        ? Colors.green[600]
-                        : Colors.red[400],
-                  ),
+                const SizedBox(width: 12),
+                Text('Total Storage', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.grey[800])),
+                const Spacer(),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                  decoration: BoxDecoration(color: Colors.teal[50], borderRadius: BorderRadius.circular(20)),
+                  child: Text('${_allWarehouses.length} WH', style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: Colors.teal[700])),
                 ),
               ],
-              const SizedBox(width: 8),
-            ],
-            Text(time, style: TextStyle(fontSize: 11, color: Colors.grey[500])),
+            ),
+            const SizedBox(height: 12),
+            // Toplam kapasite barı
+            LinearProgressIndicator(
+              value: _totalCapPercent, minHeight: 8,
+              backgroundColor: Colors.teal[100],
+              valueColor: AlwaysStoppedAnimation<Color>(_totalCapPercent > 0.9 ? Colors.red : Colors.teal),
+            ),
+            const SizedBox(height: 6),
+            Text('$_totalUsed / $_totalCapacity used', style: TextStyle(fontSize: 12, color: Colors.grey[600])),
+            const SizedBox(height: 12),
+            // Kaynak bazında toplamlar
+            Row(
+              children: [
+                _buildResourceStat(ResourceType.wood, _totalWood, Icons.arrow_downward, Colors.green),
+                const SizedBox(width: 8),
+                _buildResourceStat(ResourceType.lumber, _totalLumber, Icons.arrow_downward, Colors.brown),
+                const SizedBox(width: 8),
+                _buildResourceStat(ResourceType.furniture, _totalFurniture, Icons.arrow_downward, Colors.orange),
+              ],
+            ),
           ],
         ),
-        dense: true,
       ),
     );
   }
 
-  Widget _buildContent(Warehouse warehouse) {
-    final usedCapacity = warehouse.stock.values.fold(
-      0,
-      (sum, value) => sum + value,
+  Widget _buildResourceStat(ResourceType type, int amount, IconData icon, Color color) {
+    return Expanded(
+      child: Container(
+        padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 8),
+        decoration: BoxDecoration(
+          color: color.withValues(alpha: 0.08),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: color.withValues(alpha: 0.2)),
+        ),
+        child: Column(
+          children: [
+            Text(_resEmoji(type), style: const TextStyle(fontSize: 20)),
+            const SizedBox(height: 4),
+            Text('$amount', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: color)),
+            Text(type.name, style: TextStyle(fontSize: 11, color: Colors.grey[600])),
+          ],
+        ),
+      ),
     );
-    final capacityPercent = warehouse.capacity == 0
-        ? 0.0
-        : usedCapacity / warehouse.capacity;
+  }
 
-    return SingleChildScrollView(
-      padding: const EdgeInsets.all(16),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // Capacity card
-          Card(
-            elevation: 3,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(16),
-            ),
-            child: Padding(
-              padding: const EdgeInsets.all(16),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
+  Widget _buildWarehouseCard(Warehouse w) {
+    final isSelected = w.id == _selectedWarehouseId;
+    final used = w.usedCapacity;
+    final capPct = w.capacity > 0 ? used / w.capacity : 0.0;
+
+    return Card(
+      margin: const EdgeInsets.only(bottom: 12),
+      elevation: isSelected ? 4 : 2,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(16),
+        side: BorderSide(color: isSelected ? Colors.teal : Colors.grey[300]!, width: isSelected ? 2 : 1),
+      ),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(16),
+        onTap: () => setState(() => _selectedWarehouseId = w.id),
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
                 children: [
-                  Row(
-                    children: [
-                      Container(
-                        width: 40,
-                        height: 40,
-                        decoration: BoxDecoration(
-                          color: Colors.teal.withValues(alpha: 0.1),
-                          borderRadius: BorderRadius.circular(10),
-                        ),
-                        child: const Icon(
-                          Icons.inventory,
-                          color: Colors.teal,
-                          size: 24,
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                      const Text(
-                        'Storage Capacity',
-                        style: TextStyle(
-                          fontSize: 18,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                    ],
+                  Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(color: Colors.teal.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(10)),
+                    child: const Icon(Icons.warehouse, color: Colors.teal, size: 24),
                   ),
-
-                  const SizedBox(height: 16),
-                  LinearProgressIndicator(
-                    value: capacityPercent,
-                    minHeight: 16,
-                    backgroundColor: Colors.teal[100],
-                    valueColor: const AlwaysStoppedAnimation<Color>(
-                      Colors.teal,
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(w.name, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                        Text(w.id, style: TextStyle(fontSize: 11, color: Colors.grey[500], fontFamily: 'monospace')),
+                      ],
                     ),
                   ),
-                  const SizedBox(height: 12),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Text(
-                        'Free: ${warehouse.freeCapacity}',
-                        style: const TextStyle(
-                          fontWeight: FontWeight.bold,
-                          fontSize: 14,
-                        ),
-                      ),
-                      Text(
-                        '$usedCapacity / ${warehouse.capacity}',
-                        style: TextStyle(fontSize: 14, color: Colors.grey[600]),
-                      ),
-                    ],
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: capPct > 0.9 ? Colors.red[50] : Colors.teal[50],
+                      borderRadius: BorderRadius.circular(20),
+                    ),
+                    child: Text('$used / ${w.capacity}',
+                      style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: capPct > 0.9 ? Colors.red[700] : Colors.teal[700])),
                   ),
                 ],
               ),
-            ),
-          ),
-
-          const SizedBox(height: 24),
-
-          // Resources section
-          const Text(
-            'Resources',
-            style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-          ),
-          const SizedBox(height: 12),
-
-          ...ResourceType.values.map((resource) {
-            return _resourceCard(
-              resource,
-              warehouse.get(resource),
-              warehouse.capacity,
-            );
-          }),
-
-          const SizedBox(height: 24),
-
-          // Logs section
-          const Text(
-            'Recent Activity',
-            style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-          ),
-          const SizedBox(height: 12),
-
-          if (warehouse.logs.isEmpty)
-            Card(
-              elevation: 1,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(10),
+              const SizedBox(height: 8),
+              LinearProgressIndicator(
+                value: capPct, minHeight: 6,
+                backgroundColor: Colors.teal[100],
+                valueColor: AlwaysStoppedAnimation<Color>(capPct > 0.9 ? Colors.red : Colors.teal),
               ),
-              child: Container(
-                width: double.infinity,
-                padding: const EdgeInsets.all(24),
-                child: const Center(
-                  child: Text(
-                    'No activity yet.',
-                    style: TextStyle(color: Colors.grey),
-                  ),
-                ),
+              const SizedBox(height: 8),
+              Row(
+                children: ResourceType.values.map((type) {
+                  final amt = w.get(type);
+                  return Expanded(
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Text(_resEmoji(type), style: const TextStyle(fontSize: 16)),
+                        const SizedBox(width: 4),
+                        Text('$amt', style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: _resColor(type))),
+                      ],
+                    ),
+                  );
+                }).toList(),
               ),
-            )
-          else
-            ...warehouse.logs.take(20).map((log) => _logCard(log)),
-        ],
+              if (isSelected && w.logs.isNotEmpty) ...[
+                const SizedBox(height: 8), const Divider(), const SizedBox(height: 8),
+                const Text('Recent Activity', style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold)),
+                ...w.logs.take(5).map((log) {
+                  final op = log.operation == 'in' ? '+' : (log.operation == 'out' ? '-' : '');
+                  final amt = log.amount > 0 ? '$op${log.amount}' : '';
+                  final time = '${log.timestamp.hour.toString().padLeft(2, '0')}:${log.timestamp.minute.toString().padLeft(2, '0')}';
+                  return Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 2),
+                    child: Row(
+                      children: [
+                        Icon(log.operation == 'in' ? Icons.arrow_downward : (log.operation == 'out' ? Icons.arrow_upward : Icons.info_outline), size: 14,
+                          color: log.operation == 'in' ? Colors.green : (log.operation == 'out' ? Colors.red : Colors.blue)),
+                        const SizedBox(width: 4),
+                        Expanded(child: Text('${log.reason} $amt', style: TextStyle(fontSize: 11, color: Colors.grey[600]))),
+                        Text(time, style: TextStyle(fontSize: 10, color: Colors.grey[400])),
+                      ],
+                    ),
+                  );
+                }),
+              ],
+              if (isSelected && w.logs.isEmpty)
+                Padding(padding: const EdgeInsets.only(top: 8),
+                  child: Text('No activity', style: TextStyle(fontSize: 12, fontStyle: FontStyle.italic, color: Colors.grey[400]))),
+            ],
+          ),
+        ),
       ),
     );
   }
@@ -340,42 +280,68 @@ class _WarehouseScreenState extends State<WarehouseScreen> {
           IconButton(
             icon: const Icon(Icons.factory, color: Colors.black54),
             onPressed: () => Navigator.of(context).pushReplacement(
-              MaterialPageRoute(
-                builder: (context) =>
-                    FactoryScreen(warehouseId: widget.warehouseId),
-              ),
+              MaterialPageRoute(builder: (context) => FactoryScreen(warehouseId: _selectedWarehouseId ?? widget.warehouseId)),
             ),
           ),
           IconButton(
             icon: const Icon(Icons.shopping_cart, color: Colors.black54),
             onPressed: () => Navigator.of(context).pushReplacement(
-              MaterialPageRoute(builder: (context) => BuildingShopScreen()),
+              MaterialPageRoute(builder: (context) => const BuildingShopScreen()),
             ),
           ),
         ],
-        title: Center(
-          child: Text(
-            _warehouse?.name ?? 'Warehouse',
-            style: const TextStyle(
-              color: Colors.black87,
-              fontWeight: FontWeight.bold,
-              fontSize: 30,
-              letterSpacing: 1.5,
-              fontStyle: FontStyle.italic,
-              shadows: [
-                Shadow(
-                  offset: Offset(2, 2),
-                  blurRadius: 3,
-                  color: Colors.grey,
-                ),
-              ],
-            ),
-          ),
+        title: const Center(
+          child: Text('Warehouses', style: TextStyle(color: Colors.black87, fontWeight: FontWeight.bold, fontSize: 30, letterSpacing: 1.5, fontStyle: FontStyle.italic)),
         ),
       ),
-      body: _warehouse == null
-          ? const Center(child: CircularProgressIndicator())
-          : _buildContent(_warehouse!),
+      body: _allWarehouses.isEmpty
+          ? Center(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  const Icon(Icons.warehouse_outlined, size: 64, color: Colors.grey),
+                  const SizedBox(height: 16),
+                  Text(_confirmedEmpty ? 'No warehouses yet' : 'Loading...',
+                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.grey[600])),
+                  Text(_confirmedEmpty ? 'Buy one from the Building Shop' : '',
+                    style: TextStyle(fontSize: 14, color: Colors.grey[500])),
+                  if (!_confirmedEmpty) ...[
+                    const SizedBox(height: 16),
+                    SizedBox(width: 24, height: 24, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.grey[400])),
+                  ],
+                ],
+              ),
+            )
+          : RefreshIndicator(
+              onRefresh: () async => setState(() => _allWarehouses = _engine.getAllWarehouses()),
+              child: ListView(
+                padding: const EdgeInsets.only(bottom: 16),
+                children: [
+                  // === TOPLU ÖZET KARTI ===
+                  _buildSummaryCard(),
+                  const SizedBox(height: 8),
+                  // Warehouse listesi başlığı
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 20),
+                    child: Row(
+                      children: [
+                        const Icon(Icons.warehouse, size: 18, color: Colors.teal),
+                        const SizedBox(width: 6),
+                        Text('Warehouses', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.grey[700])),
+                        const Spacer(),
+                        Text('${_allWarehouses.length} total', style: TextStyle(fontSize: 13, color: Colors.grey[500])),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  // Tek tek warehouse kartları
+                  ..._allWarehouses.map((w) => Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 16),
+                    child: _buildWarehouseCard(w),
+                  )),
+                ],
+              ),
+            ),
     );
   }
 }
