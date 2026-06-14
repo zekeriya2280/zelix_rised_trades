@@ -139,6 +139,7 @@ class GameState {
       trucks: List.from(trucks),
       routes: List.from(routes),
       cities: List.from(cities),
+      purchasedBuildings: Map<String, int>.from(purchasedBuildings),
     );
   }
 }

@@ -321,6 +321,7 @@ class GameEngine {
     required String toWarehouseId,
     required ResourceType resourceType,
     required int amount,
+    required String routeId,
     String reason = 'transport',
   }) {
     truckSystem.requestShipment(
@@ -329,6 +330,7 @@ class GameEngine {
       toWarehouseId: toWarehouseId,
       resourceType: resourceType,
       amount: amount,
+      routeId: routeId,
       reason: reason,
     );
   }

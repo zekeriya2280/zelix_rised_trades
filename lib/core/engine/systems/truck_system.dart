@@ -29,12 +29,15 @@ class TruckSystem extends ChangeNotifier implements ISystem {
     required String id,
     required String routeId,
     int capacity = 100,
+    int level = 1,
   }) {
     final truck = Truck(
       id: id,
       routeId: routeId,
       capacity: capacity,
+      level: level,
     );
+
 
     state.addTruck(truck);
     notifyListeners();
@@ -64,13 +67,21 @@ class TruckSystem extends ChangeNotifier implements ISystem {
     required String toWarehouseId,
     required ResourceType resourceType,
     required int amount,
+    required String routeId,
     String reason = 'transport',
   }) {
+    final hasDepot = (state.purchasedBuildings['Truck Depot'] ?? 0) > 0;
+    if (!hasDepot) {
+      debugPrint('[TruckSystem] Shipment rejected: Truck Depot is not owned');
+      return;
+    }
+
     _pendingShipments.add(_Shipment(
       fromWarehouseId: fromWarehouseId,
       toWarehouseId: toWarehouseId,
       resourceType: resourceType,
       amount: amount,
+      routeId: routeId,
       reason: reason,
     ));
     debugPrint('[TruckSystem] Shipment queued: $amount ${resourceType.name}');
@@ -96,28 +107,52 @@ class TruckSystem extends ChangeNotifier implements ISystem {
       return false;
     }
 
-    if (!to.canAdd(shipment.amount)) {
+    // Truck level/capacity kuralını engine'a bağla.
+    final trucksOnRoute = getTrucksByRoute(state, shipment.routeId);
+    if (trucksOnRoute.isEmpty) {
+      debugPrint('[TruckSystem] Shipment failed: no truck on route ${shipment.routeId}');
+      return false;
+    }
+
+    // Basit: ilk uygun truck.
+    final truck = trucksOnRoute.first;
+
+    final effectiveCapacity = truck.effectiveCapacity.floor();
+    final effectiveAmount = shipment.amount.clamp(1, effectiveCapacity);
+
+    if (!to.canAdd(effectiveAmount)) {
       debugPrint('[TruckSystem] Shipment failed: target full');
+      return false;
+    }
+
+    // Arıza olasılığı: seyahat başı.
+    final rnd = DateTime.now().microsecondsSinceEpoch % 100000;
+    final p = (rnd % 1000) / 1000.0; // 0..1
+    if (p < truck.faultChance) {
+      // Arıza: bekleme mantığı henüz progres sistemine bağlanmadığı için bu tick'te taşımayı yapma.
+      debugPrint(
+          '[TruckSystem] Truck ${truck.id} fault! duration=${truck.faultDurationSeconds}s (shipment cancelled for now)');
       return false;
     }
 
     final removed = from.remove(
       shipment.resourceType,
-      shipment.amount,
+      effectiveAmount,
       reason: '${shipment.reason} (out)',
     );
     if (!removed) return false;
 
     to.add(
       shipment.resourceType,
-      shipment.amount,
+      effectiveAmount,
       reason: '${shipment.reason} (in)',
     );
 
     notifyListeners();
-    debugPrint('[TruckSystem] Shipment completed: $shipment');
+    debugPrint('[TruckSystem] Shipment completed: $shipment (truck=${truck.id}, level=${truck.level}, amount=$effectiveAmount)');
     return true;
   }
+
 
   List<Truck> getAllTrucks(GameState state) {
     return List.from(state.trucks);
@@ -133,6 +168,7 @@ class TruckSystem extends ChangeNotifier implements ISystem {
 class _Shipment {
   final String fromWarehouseId;
   final String toWarehouseId;
+  final String routeId;
   final ResourceType resourceType;
   final int amount;
   final String reason;
@@ -140,6 +176,7 @@ class _Shipment {
   _Shipment({
     required this.fromWarehouseId,
     required this.toWarehouseId,
+    required this.routeId,
     required this.resourceType,
     required this.amount,
     required this.reason,
@@ -147,6 +184,6 @@ class _Shipment {
 
   @override
   String toString() {
-    return '$amount ${resourceType.name} $fromWarehouseId -> $toWarehouseId';
+    return '$amount ${resourceType.name} $fromWarehouseId -> $toWarehouseId (route=$routeId)';
   }
 }
