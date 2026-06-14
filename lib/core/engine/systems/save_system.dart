@@ -74,7 +74,7 @@ class SaveSystem extends ChangeNotifier implements ISystem {
     if (savedPlayer != null) {
       player = savedPlayer;
     } else {
-      player = Player(nickname: 'Player', money: 100000);
+      player = Player(nickname: 'Player', money: 10000000);
     }
 
     final warehouses = _hive.getAllWarehouses();

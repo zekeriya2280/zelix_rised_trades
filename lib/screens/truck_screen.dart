@@ -280,7 +280,7 @@ class _TruckScreenState extends State<TruckScreen> {
                                 decoration: BoxDecoration(
                                   color: _hasTruckDepot ? Colors.green[50] : Colors.red[50],
                                   borderRadius: BorderRadius.circular(14),
-                                  border: Border.all(color: _hasTruckDepot ? Colors.green : Colors.red.withOpacity(0.6)),
+                                  border: Border.all(color: _hasTruckDepot ? Colors.green : Colors.red.withValues(alpha: 0.6)),
                                 ),
                                 child: Text(
                                   _hasTruckDepot ? 'Ready' : 'Required',
@@ -296,7 +296,7 @@ class _TruckScreenState extends State<TruckScreen> {
                           const SizedBox(height: 16),
 
                           DropdownButtonFormField<TrucksList>(
-                            value: _selectedTruck,
+                            initialValue: _selectedTruck,
                             decoration: const InputDecoration(labelText: 'Select Truck'),
                             items: TrucksList.values
                                 .map((tEnum) => DropdownMenuItem(
@@ -310,14 +310,14 @@ class _TruckScreenState extends State<TruckScreen> {
 
                           const SizedBox(height: 16),
                           DropdownButtonFormField<String>(
-                            value: _fromWarehouseId,
+                            initialValue: _fromWarehouseId,
                             decoration: const InputDecoration(labelText: 'From Warehouse'),
                             items: _warehouses.map((w) => DropdownMenuItem(value: w.id, child: Text(w.name))).toList(),
                             onChanged: (v) => setState(() => _fromWarehouseId = v),
                           ),
                           const SizedBox(height: 12),
                           DropdownButtonFormField<CityList>(
-                            value: _selectedCity,
+                            initialValue: _selectedCity,
                             decoration: const InputDecoration(labelText: 'To City'),
                             items: CityList.values
                                 .map((cEnum) => DropdownMenuItem(
@@ -338,7 +338,7 @@ class _TruckScreenState extends State<TruckScreen> {
 
                           const SizedBox(height: 16),
                           DropdownButtonFormField<ResourceType>(
-                            value: _resourceType,
+                            initialValue: _resourceType,
                             decoration: const InputDecoration(labelText: 'Resource'),
                             items: ResourceType.values
                                 .map((t) => DropdownMenuItem(value: t, child: Text(t.name)))
@@ -356,7 +356,7 @@ class _TruckScreenState extends State<TruckScreen> {
                               setState(() => _amount = v.round());
                             },
                           ),
-                          Text('Amount: ${_limitedAmount} / cap($_truckCapacity)'),
+                          Text('Amount: $_limitedAmount / cap($_truckCapacity)'),
 
                           const SizedBox(height: 12),
                           Slider(

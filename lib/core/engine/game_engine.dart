@@ -75,7 +75,7 @@ class GameEngine {
   final ValueNotifier<int> stateVersion = ValueNotifier<int>(0);
 
   /// Player para değişimi için
-  final ValueNotifier<int> moneyNotifier = ValueNotifier<int>(100000);
+  final ValueNotifier<int> moneyNotifier = ValueNotifier<int>(10000000);
 
   /// Factory listesi değişimi için
   final ValueNotifier<List<models.Factory>> factoriesNotifier =

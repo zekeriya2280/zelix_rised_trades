@@ -1,8 +1,6 @@
 import 'package:flutter/foundation.dart';
 
 import '../../enums/factory_type.dart';
-import '../../models/factory.dart' as models;
-import '../../models/warehouse.dart';
 import '../game_state.dart';
 import 'factory_system.dart';
 import 'i_system.dart';
