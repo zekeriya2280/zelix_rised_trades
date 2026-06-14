@@ -146,7 +146,7 @@ class HiveService {
     await _warehouses.clear();
     await _player.put('main', jsonEncode({
       'nickname': 'Player',
-      'money': 100000,
+      'money': 10000000,
     }));
     print('HIVE RESET COMPLETE - All data cleared, player reset to ¥100000');
   }

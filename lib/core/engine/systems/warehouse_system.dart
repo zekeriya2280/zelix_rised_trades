@@ -59,14 +59,12 @@ class WarehouseSystem extends ChangeNotifier implements ISystem {
     required int capacity,
   }) {
     var warehouse = state.getWarehouse(id);
-    if (warehouse == null) {
-      warehouse = createWarehouse(
+    warehouse ??= createWarehouse(
         state,
         id: id,
         name: name,
         capacity: capacity,
       );
-    }
     return warehouse!;
   }
 
@@ -144,8 +142,4 @@ class WarehouseSystem extends ChangeNotifier implements ISystem {
     return List.from(state.warehouses);
   }
 
-  @override
-  void dispose() {
-    super.dispose();
-  }
 }

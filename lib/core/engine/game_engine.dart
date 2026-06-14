@@ -11,11 +11,20 @@ import 'game_state.dart';
 import 'systems/city_system.dart';
 import 'systems/factory_system.dart';
 import 'systems/i_system.dart';
+import 'systems/building_shop_system.dart';
+
 import 'systems/player_system.dart';
+
+
+
+
+
+
 import 'systems/route_system.dart';
 import 'systems/save_system.dart';
 import 'systems/truck_system.dart';
 import 'systems/warehouse_system.dart';
+
 
 /// Ana oyun motoru.
 /// 
@@ -43,6 +52,8 @@ class GameEngine {
   late final RouteSystem routeSystem;
   late final CitySystem citySystem;
   late final SaveSystem saveSystem;
+  late final BuildingShopSystem buildingShopSystem;
+
 
   /// Tüm sistemlerin listesi (sıralı tick için)
   late final List<ISystem> _systems;
@@ -114,16 +125,20 @@ class GameEngine {
     routeSystem = RouteSystem();
     citySystem = CitySystem();
     saveSystem = SaveSystem();
+    buildingShopSystem = BuildingShopSystem();
+
 
     _systems = [
       playerSystem,
       factorySystem,
       warehouseSystem,
+      buildingShopSystem,
       truckSystem,
       routeSystem,
       citySystem,
       saveSystem,
     ];
+
 
     // ChangeNotifier olan sistemleri dinle
     for (final system in _systems) {
@@ -185,11 +200,6 @@ class GameEngine {
     for (final system in _systems) {
       system.update(_state);
     }
-
-    final totalUpkeep = factorySystem.totalUpkeepThisCycle;
-    if (totalUpkeep > 0) {
-      playerSystem.deductUpkeep(_state, totalUpkeep);
-    }
   }
 
   // ==================== UI API ====================
@@ -207,29 +217,8 @@ class GameEngine {
 
   /// Yeni factory satın al (para otomatik düşer)
   models.Factory? buyFactory(FactoryType type) {
-    // Önce maliyeti kontrol et
-    final cost = _getFactoryCost(type);
-    if (!canAfford(cost)) return null;
-
-    // Parayı düş
-    deductMoney(cost);
-
-    // Factory'yi ekle
-    final factory = factorySystem.buyFactory(_state, type);
-    saveSystem.save(_state);
-    return factory;
-  }
-
-  /// Factory tipine göre maliyet hesapla
-  int _getFactoryCost(FactoryType type) {
-    switch (type) {
-      case FactoryType.forest:
-        return 5000;
-      case FactoryType.lumberMill:
-        return 15000;
-      case FactoryType.furnitureFactory:
-        return 30000;
-    }
+    // FactorySystem maliyet hesabını yapıp satın alma akışını tamamlar
+    return factorySystem.buyFactory(_state, type);
   }
 
   void toggleFactory(String factoryId) {
@@ -385,22 +374,46 @@ class GameEngine {
 
   // ---- Building Shop ----
 
-  /// Building satın al - count kalıcı olarak GameState'te saklanır
   int getBuildingCount(String buildingName) {
-    return _state.purchasedBuildings[buildingName] ?? 0;
+    return buildingShopSystem.getBuildingCount(_state, buildingName);
   }
 
-  /// Building satın alındığında count'u artır ve yeni fiyatı döndür
-  int incrementBuildingCount(String buildingName, int currentCost) {
-    final count = (_state.purchasedBuildings[buildingName] ?? 0) + 1;
-    _state.purchasedBuildings[buildingName] = count;
-    final newCost = (currentCost * 1.3).round();
-    saveSystem.save(_state);
-    _syncNotifiers();
-    return newCost;
+  int getBuildingCost(String buildingName, int baseCost, int currentCount) {
+    return buildingShopSystem.getBuildingCost(
+      buildingName: buildingName,
+      baseCost: baseCost,
+      currentCount: currentCount,
+    );
+  }
+
+  Future<bool> buyBuilding({
+    required String buildingName,
+    required String type,
+    required int baseCost,
+    required FactoryType? factoryType,
+    required int warehouseCapacity,
+  }) {
+    return buildingShopSystem.buyBuilding(
+      _state,
+      buildingName: buildingName,
+      type: type,
+      baseCost: baseCost,
+      factoryType: factoryType,
+      warehouseCapacity: warehouseCapacity,
+      playerSystem: playerSystem,
+      factorySystem: factorySystem,
+      warehouseSystem: warehouseSystem,
+    ).then((ok) {
+      if (ok) {
+        saveSystem.save(_state);
+        _syncNotifiers();
+      }
+      return ok;
+    });
   }
 
   // ---- Save / Load ----
+
 
   Future<void> saveGame() async {
     await saveSystem.save(_state);
@@ -421,6 +434,7 @@ class GameEngine {
   void dispose() {
     stop();
     tickNotifier.dispose();
+
     stateVersion.dispose();
     moneyNotifier.dispose();
     factoriesNotifier.dispose();

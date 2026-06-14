@@ -128,7 +128,24 @@ class FactorySystem extends ChangeNotifier implements ISystem {
     return null; // Tüm warehouse'lar dolu
   }
 
+  int getFactoryCost(FactoryType type) {
+    switch (type) {
+      case FactoryType.forest:
+        return 5000;
+      case FactoryType.lumberMill:
+        return 15000;
+      case FactoryType.furnitureFactory:
+        return 30000;
+    }
+  }
+
   models.Factory? buyFactory(GameState state, FactoryType type) {
+    final cost = getFactoryCost(type);
+    if (state.player.money < cost) return null;
+
+    // Parayı düş
+    state.deductMoney(cost);
+
     final factory = models.Factory(
       id: '${type.name}_${DateTime.now().millisecondsSinceEpoch}',
       type: type,
@@ -141,7 +158,7 @@ class FactorySystem extends ChangeNotifier implements ISystem {
 
     state.addFactory(factory);
     notifyListeners();
-    debugPrint('[FactorySystem] New factory: ${factory.id}');
+    debugPrint('[FactorySystem] New factory: ${factory.id} (cost=$cost)');
     return factory;
   }
 
@@ -157,8 +174,4 @@ class FactorySystem extends ChangeNotifier implements ISystem {
     return List.from(state.factories);
   }
 
-  @override
-  void dispose() {
-    super.dispose();
-  }
 }

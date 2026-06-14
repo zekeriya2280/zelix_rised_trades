@@ -52,8 +52,4 @@ class PlayerSystem extends ChangeNotifier implements ISystem {
     return state.player.money >= cost;
   }
 
-  @override
-  void dispose() {
-    super.dispose();
-  }
 }

@@ -139,8 +139,4 @@ class SaveSystem extends ChangeNotifier implements ISystem {
     _hive.printHiveState();
   }
 
-  @override
-  void dispose() {
-    super.dispose();
-  }
 }

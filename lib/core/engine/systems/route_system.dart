@@ -82,8 +82,4 @@ class RouteSystem extends ChangeNotifier implements ISystem {
     return state.routes.where((r) => r.trucks > 0).length;
   }
 
-  @override
-  void dispose() {
-    super.dispose();
-  }
 }

@@ -39,6 +39,10 @@ class _BuildingShopScreenState extends State<BuildingShopScreen> {
       name: 'Warehouse', emoji: '🏭',
       description: 'Increases storage capacity', baseCost: 50000, type: 'warehouse',
     ),
+    _BuildingInfo(
+      name: 'Truck Depot', emoji: '🚚',
+      description: 'Required to start warehouse → city transport', baseCost: 120000, type: 'depot',
+    ),
   ];
 
   @override
@@ -62,51 +66,34 @@ class _BuildingShopScreenState extends State<BuildingShopScreen> {
   /// Kalıcı state'ten building count'u al
   int _getCount(String name) => _engine.getBuildingCount(name);
 
-  /// Count'a göre güncel fiyatı hesapla
-  int _getCost(int baseCost, int count) {
-    if (count == 0) return baseCost;
-    double cost = baseCost.toDouble();
-    for (int i = 0; i < count; i++) {
-      cost *= 1.3;
-    }
-    return cost.round();
-  }
-
   Future<void> buyBuilding(int index) async {
     final building = _buildings[index];
     final count = _getCount(building.name);
-    final cost = _getCost(building.baseCost, count);
+    final cost = _engine.getBuildingCost(building.name, building.baseCost, count);
+
 
     if (!_engine.canAfford(cost)) {
       _showSnack('❌ Not enough money for ${building.name}!', Colors.red);
       return;
     }
 
-    if (building.type == 'warehouse') {
-      if (!_engine.deductMoney(cost)) {
-        _showSnack('❌ Not enough money!', Colors.red);
-        return;
-      }
-      _engine.ensureWarehouseExists(
-        id: 'w${DateTime.now().millisecondsSinceEpoch}',
-        name: 'Warehouse #${count + 1}',
-        capacity: 500,
-      );
-    } else {
-      final factoryType = _getFactoryType(building.name);
-      if (factoryType == null) return;
+    final purchaseOk = await _engine.buyBuilding(
+      buildingName: building.name,
+      baseCost: building.baseCost,
+      type: building.type,
+      factoryType: _getFactoryType(building.name),
+      warehouseCapacity: 500,
+    );
 
-      final factory = _engine.buyFactory(factoryType);
-      if (factory == null) {
-        _showSnack('❌ Purchase failed!', Colors.red);
-        return;
-      }
+    if (purchaseOk != true) {
+      _showSnack('❌ Purchase failed!', Colors.red);
+      return;
     }
 
-    // Building count'u GameState'te kalıcı olarak artır
-    _engine.incrementBuildingCount(building.name, cost);
+
     _showSnack('${building.emoji} ${building.name} purchased!', Colors.green);
   }
+
 
   FactoryType? _getFactoryType(String name) {
     switch (name) {
@@ -116,6 +103,7 @@ class _BuildingShopScreenState extends State<BuildingShopScreen> {
       default: return null;
     }
   }
+
 
   void _showSnack(String msg, Color bg) {
     if (!mounted) return;
@@ -218,7 +206,7 @@ class _BuildingShopScreenState extends State<BuildingShopScreen> {
               itemBuilder: (context, index) {
                 final building = _buildings[index];
                 final count = _getCount(building.name);
-                final cost = _getCost(building.baseCost, count);
+                final cost = _engine.getBuildingCost(building.name, building.baseCost, count);
                 final canAfford = money >= cost;
 
                 return Card(
@@ -228,57 +216,112 @@ class _BuildingShopScreenState extends State<BuildingShopScreen> {
                     borderRadius: BorderRadius.circular(16),
                     side: BorderSide(color: canAfford ? Colors.green[300]! : Colors.grey[300]!, width: 1),
                   ),
-                  child: InkWell(
-                    borderRadius: BorderRadius.circular(16),
-                    onTap: () => buyBuilding(index),
-                    child: Padding(
-                      padding: const EdgeInsets.all(16),
-                      child: Row(
-                        children: [
-                          Container(
-                            width: 60, height: 60,
-                            decoration: BoxDecoration(color: canAfford ? Colors.green[50] : Colors.grey[100], borderRadius: BorderRadius.circular(12)),
-                            child: Center(child: Text(building.emoji, style: const TextStyle(fontSize: 36))),
-                          ),
-                          const SizedBox(width: 16),
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Row(
-                                  children: [
-                                    Text(building.name, style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.brown[800])),
-                                    if (count > 0) ...[
-                                      const SizedBox(width: 8),
+                          child: InkWell(
+                            borderRadius: BorderRadius.circular(16),
+                            onTap: () => buyBuilding(index),
+                            child: Padding(
+                              padding: const EdgeInsets.all(16),
+                              child: Row(
+                                children: [
+                                  Container(
+                                    width: 60,
+                                    height: 60,
+                                    decoration: BoxDecoration(
+                                      color: canAfford ? Colors.green[50] : Colors.grey[100],
+                                      borderRadius: BorderRadius.circular(12),
+                                    ),
+                                    child: Center(
+                                      child: Text(
+                                        building.emoji,
+                                        style: const TextStyle(fontSize: 36),
+                                      ),
+                                    ),
+                                  ),
+                                  const SizedBox(width: 16),
+                                  Expanded(
+                                    child: Column(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      children: [
+                                        Row(
+                                          children: [
+                                            Text(
+                                              building.name,
+                                              style: TextStyle(
+                                                fontSize: 18,
+                                                fontWeight: FontWeight.bold,
+                                                color: Colors.brown[800],
+                                              ),
+                                            ),
+                                            if (count > 0) ...[
+                                              const SizedBox(width: 8),
+                                              Container(
+                                                padding: const EdgeInsets.symmetric(
+                                                  horizontal: 8,
+                                                  vertical: 2,
+                                                ),
+                                                decoration: BoxDecoration(
+                                                  color: Colors.brown[100],
+                                                  borderRadius: BorderRadius.circular(10),
+                                                ),
+                                                child: Text(
+                                                  'x$count',
+                                                  style: TextStyle(
+                                                    fontSize: 13,
+                                                    fontWeight: FontWeight.bold,
+                                                    color: Colors.brown[600],
+                                                  ),
+                                                ),
+                                              ),
+                                            ],
+                                          ],
+                                        ),
+                                        const SizedBox(height: 4),
+                                        Text(
+                                          building.description,
+                                          style: TextStyle(
+                                            fontSize: 13,
+                                            color: Colors.grey[600],
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                  const SizedBox(width: 12),
+                                  Column(
+                                    children: [
+                                      Text(
+                                        '¥$cost',
+                                        style: TextStyle(
+                                          fontSize: 16,
+                                          fontWeight: FontWeight.bold,
+                                          color: canAfford ? Colors.green[700] : Colors.red[400],
+                                        ),
+                                      ),
+                                      const SizedBox(height: 4),
                                       Container(
-                                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                                        decoration: BoxDecoration(color: Colors.brown[100], borderRadius: BorderRadius.circular(10)),
-                                        child: Text('x$count', style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: Colors.brown[600])),
+                                        padding: const EdgeInsets.symmetric(
+                                          horizontal: 16,
+                                          vertical: 6,
+                                        ),
+                                        decoration: BoxDecoration(
+                                          color: canAfford ? Colors.green[600] : Colors.grey[400],
+                                          borderRadius: BorderRadius.circular(8),
+                                        ),
+                                        child: const Text(
+                                          'BUY',
+                                          style: TextStyle(
+                                            color: Colors.white,
+                                            fontWeight: FontWeight.bold,
+                                            fontSize: 13,
+                                          ),
+                                        ),
                                       ),
                                     ],
-                                  ],
-                                ),
-                                const SizedBox(height: 4),
-                                Text(building.description, style: TextStyle(fontSize: 13, color: Colors.grey[600])),
-                              ],
+                                  ),
+                                ],
+                              ),
                             ),
                           ),
-                          const SizedBox(width: 12),
-                          Column(
-                            children: [
-                              Text('¥$cost', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: canAfford ? Colors.green[700] : Colors.red[400])),
-                              const SizedBox(height: 4),
-                              Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
-                                decoration: BoxDecoration(color: canAfford ? Colors.green[600] : Colors.grey[400], borderRadius: BorderRadius.circular(8)),
-                                child: const Text('BUY', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13)),
-                              ),
-                            ],
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
                 );
               },
             ),
@@ -322,7 +365,7 @@ class _BuildingInfo {
   final String emoji;
   final String description;
   final int baseCost;
-  final String type; // 'factory' or 'warehouse'
+  final String type; // 'factory', 'warehouse' or 'depot'
 
   const _BuildingInfo({
     required this.name,

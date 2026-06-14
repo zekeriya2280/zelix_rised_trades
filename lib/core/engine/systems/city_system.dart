@@ -94,8 +94,4 @@ class CitySystem extends ChangeNotifier implements ISystem {
     }
   }
 
-  @override
-  void dispose() {
-    super.dispose();
-  }
 }
