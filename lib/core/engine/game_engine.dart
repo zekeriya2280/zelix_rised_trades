@@ -7,6 +7,8 @@ import '../enums/resource_type.dart';
 import '../models/factory.dart' as models;
 import '../models/player.dart';
 import '../models/warehouse.dart';
+import '../models/truck.dart';
+
 import 'game_state.dart';
 import 'systems/city_system.dart';
 import 'systems/factory_system.dart';
@@ -334,6 +336,47 @@ class GameEngine {
       reason: reason,
     );
   }
+
+  // ---- Truck UI Model / Derived Info (Engine-only) ----
+
+  int getTruckCapacity(String truckId) {
+    final truck = _state.trucks.where((t) => t.id == truckId).cast<Truck?>().firstOrNull;
+    if (truck == null) return 0;
+    return truck.effectiveCapacity.floor();
+  }
+
+  int getTruckLevel(String truckId) {
+    final truck = _state.trucks.where((t) => t.id == truckId).cast<Truck?>().firstOrNull;
+    return truck?.level ?? 1;
+  }
+
+  double getTruckEffectiveSpeedMultiplier(String truckId) {
+    final truck = _state.trucks.where((t) => t.id == truckId).cast<Truck?>().firstOrNull;
+    return truck?.effectiveSpeedMultiplier ?? 1.0;
+  }
+
+  double getTruckFaultChance(String truckId) {
+    final truck = _state.trucks.where((t) => t.id == truckId).cast<Truck?>().firstOrNull;
+    return truck?.faultChance ?? 0.0;
+  }
+
+  int getTruckFaultDurationSeconds(String truckId) {
+    final truck = _state.trucks.where((t) => t.id == truckId).cast<Truck?>().firstOrNull;
+    return truck?.faultDurationSeconds ?? 0;
+  }
+
+  // Fee: UI’da yapılan basit formül yerine engine parametreleriyle hesaplanır.
+  double calculateShipmentFee({
+    required int limitedAmount,
+    required int cityDistanceLevel,
+  }) {
+    const double unitPrice = 0.35;
+    return cityDistanceLevel * limitedAmount * unitPrice;
+  }
+
+  // Selected enum -> engineId map UI’da karmaşıklaşmasın diye burada basitleştirme yapabilirsiniz.
+  // (Şimdilik TruckScreen enum -> engine id eşlemesi kalabilir.)
+
 
   // ---- Route ----
 

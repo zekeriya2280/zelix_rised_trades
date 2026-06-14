@@ -14,7 +14,6 @@ class TruckScreen extends StatefulWidget {
   final String? preselectedToCityId; // City logic şimdilik UI parameter olarak taşınır.
   final ResourceType? preselectedResourceType;
   final int? preselectedAmount;
-  final double? preselectedDistance;
 
   const TruckScreen({
     super.key,
@@ -22,8 +21,8 @@ class TruckScreen extends StatefulWidget {
     this.preselectedToCityId,
     this.preselectedResourceType,
     this.preselectedAmount,
-    this.preselectedDistance,
   });
+
 
   @override
   State<TruckScreen> createState() => _TruckScreenState();
@@ -42,37 +41,52 @@ class _TruckScreenState extends State<TruckScreen> {
   int _amount = 10;
 
   // Truck selection should be real truck-based.
-  // City distance/level selection drives fee in this UI (engine shipment is still warehouse->warehouse for now).
-
-  double _cityDistanceLevel = 1; // 1..10 (affects speed/fee)
-  // double _speedLevel = 1; // 1..10 (display only for now)
-
-
   // Placeholder for future: selected destination city.
   CityList? _selectedCity;
+
+  int get _selectedCityDistanceLevel {
+    final idx = _selectedCity?.index ?? 0;
+    // Until we wire per-city properties from engine state, map enum index to 1..10.
+    return (idx + 1).clamp(1, 10);
+  }
+
 
   TrucksList? _selectedTruck;
 
   String? get _selectedTruckId =>
       _selectedTruck == null ? null : _selectedTruckEnumToEngineId(_selectedTruck!);
 
+
   int get _truckCapacity {
-
-
-    if (_selectedTruckId == null) return 1000;
-    final truck = _engine.state.trucks.where((t) => t.id == _selectedTruckId).cast<Truck?>().firstOrNull;
-    if (truck == null) return 1000;
-    return truck.effectiveCapacity.floor();
+    if (_selectedTruckId == null) return 0;
+    return _engine.getTruckCapacity(_selectedTruckId!);
   }
 
-  int get _limitedAmount => _amount.clamp(1, _truckCapacity);
+
+  int get _truckSelectedLevel {
+    if (_selectedTruckId == null) return 1;
+    return _engine.getTruckLevel(_selectedTruckId!);
+  }
+
+
+
+
+
+  int get _truckCapacitySafe => _truckCapacity < 1 ? 1 : _truckCapacity;
+
+  int get _limitedAmount => _amount.clamp(1, _truckCapacitySafe);
+
 
   // Simple fee formula (UI only for now)
   double get _fee {
-    const double unitPrice = 0.35;
-    // cityDistanceLevel (1..10) affects fee directly for now.
-    return _cityDistanceLevel * _limitedAmount * unitPrice;
+    if (_selectedCityDistanceLevel == 0) return 0;
+    return _engine.calculateShipmentFee(
+      limitedAmount: _limitedAmount,
+      cityDistanceLevel: _selectedCityDistanceLevel,
+    );
   }
+
+
 
   @override
   void initState() {
@@ -83,23 +97,35 @@ class _TruckScreenState extends State<TruckScreen> {
     _fromWarehouseId = widget.preselectedFromWarehouseId;
     _resourceType = widget.preselectedResourceType ?? ResourceType.wood;
     _amount = widget.preselectedAmount ?? 10;
-    // Legacy preselectedDistance maps to cityDistanceLevel for now.
-    _cityDistanceLevel = widget.preselectedDistance != null ? widget.preselectedDistance!.clamp(1, 10) : 1;
+    _selectedCity ??= widget.preselectedToCityId != null
+        ? CityList.values.firstWhere(
+            (e) => e.toString().split('.').last == widget.preselectedToCityId,
+            orElse: () => CityList.values.first,
+          )
+        : CityList.values.isNotEmpty
+            ? CityList.values.first
+            : null;
+
 
     _refresh();
   }
 
   String _selectedTruckEnumToEngineId(TrucksList truckEnum) {
+    // TrucksList sadece "truck1/truck2/truck3" isimleri.
+    // Breakdown değerlerinin doğru değişmesi için enum'u engine'daki truck sırasıyla eşlemek zorundayız.
+    // Ancak engine'da truck sayısı/oluş sırası farklı olabileceği için, her enum'u mevcut truck listesinde
+    // deterministik bir şekilde ilk 3'e göre eşliyoruz.
 
-    // Legacy: mevcut motor truck id'leri 't_<timestamp>' formatında üretiliyor.
-    // Bu yüzden enum -> engine id eşlemesini en az sürpriz için “sıralı indeks” ile yapıyoruz.
-    // Truckscreen ilk açılışında oluşturulan trucklar bu sıraya göre eşlenir.
     final trucks = _engine.state.trucks;
     if (trucks.isEmpty) return 't_0';
-    final idx = truckEnum.index;
-    final safeIdx = idx.clamp(0, trucks.length - 1);
-    return trucks[safeIdx].id;
+
+    final wantedIndex = truckEnum.index; // 0,1,2
+    if (wantedIndex >= trucks.length) {
+      return trucks.last.id;
+    }
+    return trucks[wantedIndex].id;
   }
+
 
   String? _selectedCityEnumToToWarehouseId(CityList cityEnum) {
     if (_warehouses.isEmpty) return null;
@@ -139,9 +165,20 @@ class _TruckScreenState extends State<TruckScreen> {
   }
 
   bool get _hasTruckDepot {
-    // BuildingShopSystem depot alımında purchasedBuildings sayacını artırıyor.
-    return (_engine.state.purchasedBuildings['Truck Depot'] ?? 0) > 0;
+    // BuildingShopSystem purchasedBuildings'a buildingName ile yazıyor.
+    // UI'da yazım farklılıkları (ör: çift boşluk) olabiliyor.
+    final purchases = _engine.state.purchasedBuildings;
+    int? count;
+    for (final entry in purchases.entries) {
+      final normalizedKey = entry.key.replaceAll(RegExp(r"\s+"), ' ').trim();
+      if (normalizedKey == 'Truck Depot') {
+        count = entry.value;
+        break;
+      }
+    }
+    return (count ?? 0) > 0;
   }
+
 
   void _createOrUseTruckAndStart() {
     if (_selectedTruckId == null) {
@@ -187,6 +224,7 @@ class _TruckScreenState extends State<TruckScreen> {
     // Truck seçimi sadece UI tarafında enum ile tutuluyor.
     // Engine'a gönderilecek routeId için seçili enum'u engine id'ye çeviriyoruz.
     final selectedTruckId = _selectedTruckId;
+
     if (selectedTruckId == null) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Select a truck'), backgroundColor: Colors.red),
@@ -196,26 +234,37 @@ class _TruckScreenState extends State<TruckScreen> {
 
 
 
-    // Shipment: şu an engine warehouse->warehouse yapıyor.
-    // Bu aşamada level/capacity/arıza engine tarafına bağlandı.
+    // Shipment: engine warehouse->warehouse yapıyor.
+    // routeId bilgisi engine state’ten okunur (model oluşturma engine tarafında olur).
+    final resolvedRouteId = _engine.state.trucks
+        .where((t) => t.id == selectedTruckId)
+        .cast<Truck?>()
+        .firstOrNull
+        ?.routeId ?? '';
+
+    if (resolvedRouteId.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Truck state not found (sync issue).'),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
+
+
     _engine.requestShipment(
       fromWarehouseId: _fromWarehouseId!,
       toWarehouseId: _toWarehouseId!,
       resourceType: _resourceType,
       amount: _limitedAmount,
-      routeId: (() {
-        final truck = _engine.state.trucks.where((t) => t.id == selectedTruckId).cast<Truck?>().firstOrNull;
-        if (truck == null) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Truck state not found (sync issue).'), backgroundColor: Colors.red),
-          );
-          return '';
-        }
-        return truck.routeId;
-      })(),
-
-      reason: 'transport (cityDistanceLevel=$_cityDistanceLevel fee=¥${_fee.toStringAsFixed(0)})',
+      routeId: routeId,
+      reason:
+          'transport (cityDistanceLevel=$_selectedCityDistanceLevel fee=¥${_fee.toStringAsFixed(0)})',
     );
+
+
+
 
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
@@ -304,7 +353,13 @@ class _TruckScreenState extends State<TruckScreen> {
                                       child: Text(tEnum.toString().split('.').last),
                                     ))
                                 .toList(),
-                            onChanged: (v) => setState(() => _selectedTruck = v),
+                            onChanged: (v) {
+                              setState(() {
+                                _selectedTruck = v;
+                                debugPrint('[Truckscreen] $_selectedTruck');
+                              });
+                            },
+
                           ),
 
 
@@ -359,14 +414,20 @@ class _TruckScreenState extends State<TruckScreen> {
                           Text('Amount: $_limitedAmount / cap($_truckCapacity)'),
 
                           const SizedBox(height: 12),
-                          Slider(
-                            value: _cityDistanceLevel,
-                            min: 1,
-                            max: 10,
-                            divisions: 9,
-                            onChanged: (v) => setState(() => _cityDistanceLevel = v),
+                          Text(
+                            'City Distance: $_selectedCityDistanceLevel | Fee: ¥_feeFixed0',
+                            style: const TextStyle(fontWeight: FontWeight.w500),
                           ),
-                          Text('City Distance Level: ${_cityDistanceLevel.toStringAsFixed(0)} | Fee: ¥${_fee.toStringAsFixed(0)}'),
+
+                          const SizedBox(height: 6),
+Text(
+                            'Truck breakdown: L$_truckSelectedLevel | cap:${_selectedTruckId == null ? '-' : _engine.getTruckCapacity(_selectedTruckId!)} | spx:${_selectedTruckId == null ? '-' : _engine.getTruckEffectiveSpeedMultiplier(_selectedTruckId!).toStringAsFixed(2)} | fault:${_selectedTruckId == null ? '-' : _engine.getTruckFaultChance(_selectedTruckId!).toStringAsFixed(3)}',
+                            style: const TextStyle(fontSize: 12, color: Colors.black54),
+                          ),
+
+
+
+
 
                           const SizedBox(height: 16),
                           SizedBox(
@@ -420,12 +481,13 @@ class _TruckScreenState extends State<TruckScreen> {
                                         ),
                                       ),
                                       Text(
-                                        'L${t.level} cap:${t.effectiveCapacity.floor()} spx:${t.effectiveSpeedMultiplier.toStringAsFixed(2)}',
+                                        'L${_engine.getTruckLevel(t.id)} cap:${_engine.getTruckCapacity(t.id)} spx:${_engine.getTruckEffectiveSpeedMultiplier(t.id).toStringAsFixed(2)}',
                                         style: const TextStyle(
                                             fontSize: 12, color: Colors.grey),
                                       ),
                                     ],
                                   ),
+
                                   const SizedBox(height: 10),
                                   Text('RouteId: ${t.routeId}',
                                       style: const TextStyle(fontSize: 13)),

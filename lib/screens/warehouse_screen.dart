@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
-import 'package:hive_flutter/hive_flutter.dart';
 import 'package:zelix_rised_trades/core/engine/game_engine.dart';
 import 'package:zelix_rised_trades/core/enums/resource_type.dart';
 import 'package:zelix_rised_trades/core/models/warehouse.dart';
 import 'package:zelix_rised_trades/screens/building_shop_screen.dart';
 import 'package:zelix_rised_trades/screens/factory_screen.dart';
+
 
 /// Warehouse Screen - Tüm warehouse'ları listeler, üstte toplu özet gösterir.
 class WarehouseScreen extends StatefulWidget {
@@ -31,21 +31,20 @@ class _WarehouseScreenState extends State<WarehouseScreen> {
     _allWarehouses = _engine.getAllWarehouses();
 
     if (_allWarehouses.isEmpty) {
-      _checkHiveDirectly();
+      _updateConfirmedEmpty();
     } else {
       _selectInitialWarehouse();
+      _updateConfirmedEmpty();
     }
+
   }
 
-  void _checkHiveDirectly() {
-    try {
-      if (Hive.isBoxOpen('warehouses_box')) {
-        final box = Hive.box('warehouses_box');
-        if (box.isEmpty) _confirmedEmpty = true;
-      }
-    } catch (_) {}
-    if (mounted) setState(() {});
+  // Engine-only: Hive'a direkt erişim yok.
+  // _confirmedEmpty, engine state'e göre hesaplanır.
+  void _updateConfirmedEmpty() {
+    _confirmedEmpty = _allWarehouses.isEmpty;
   }
+
 
   void _selectInitialWarehouse() {
     _selectedWarehouseId = widget.warehouseId;

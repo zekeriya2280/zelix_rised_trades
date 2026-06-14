@@ -1,8 +1,8 @@
 # TODO
 
-- [ ] TruckScreen: `TrucksList` enumunu truck seçimi dropdown'una bağla (id/string yerine enum kullan).
-- [ ] TruckScreen: `CityList` enumunu destination seçimi dropdown'una bağla (city distance UI’da kalacak; gönderim yine warehouse->warehouse olacak).
-- [ ] City seçimi için geçici mapping uygula: `CityList` -> mevcut `_warehouses` içinden `toWarehouseId` atanması.
-- [ ] UI rebuild optimizasyonu: liste/cache kullanımını sadeleştir ve gereksiz setState tetiklerini azalt.
-- [ ] `flutter analyze` ve manuel smoke test.
+- [ ] Read and understand current city/distance usage in truck_screen.dart and related engine code.
+- [ ] Implement: remove city distance parameter from truck screen flow; make city model variable instead.
+- [ ] Update UI: replace “City Distance Level” slider / preselectedDistance with a city selection (use CityList or selected City object) that drives fee/speed via city property.
+- [ ] Update engine/shipment reason/route creation logic if needed to use city variable.
+- [ ] Ensure compilation and run basic build/test.
 

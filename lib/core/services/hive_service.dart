@@ -1,5 +1,6 @@
 import 'dart:convert';
 
+import 'package:flutter/cupertino.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import 'package:zelix_rised_trades/core/models/building.dart';
 import 'package:zelix_rised_trades/core/models/factory.dart';
@@ -28,7 +29,7 @@ class HiveService {
     await Hive.openBox(_factoriesBox);
     await Hive.openBox(_purchasesBox);
     _initialized = true;
-    print('HIVE SERVICE INITIALIZED');
+    debugPrint('[HIVESERVICE] HIVE SERVICE INITIALIZED');
   }
 
   Box get _player => Hive.box(_playerBox);
@@ -40,7 +41,7 @@ class HiveService {
 
   Future<void> savePlayer(Player player) async {
     await _player.put('main', jsonEncode(player.toMap()));
-    print('PLAYER SAVED TO HIVE: ¥${player.money}');
+    debugPrint('[HIVESERVICE] PLAYER SAVED TO HIVE: ¥${player.money}');
   }
 
   Player? getPlayer() {
@@ -53,7 +54,7 @@ class HiveService {
 
   Future<void> saveWarehouse(Warehouse warehouse) async {
     await _warehouses.put(warehouse.id, jsonEncode(warehouse.toMap()));
-    print('WAREHOUSE SAVED TO HIVE: ${warehouse.id}');
+    debugPrint('[HIVESERVICE] WAREHOUSE SAVED TO HIVE: ${warehouse.id}');
   }
 
   Warehouse? getWarehouse(String id) {
@@ -70,7 +71,7 @@ class HiveService {
 
   Future<void> deleteWarehouse(String id) async {
     await _warehouses.delete(id);
-    print('WAREHOUSE DELETED FROM HIVE: $id');
+    debugPrint('[HIVESERVICE] WAREHOUSE DELETED FROM HIVE: $id');
   }
 
   Future<void> updateWarehouseStock(
@@ -81,37 +82,40 @@ class HiveService {
     if (warehouse == null) return;
     // stockMap keys are resource names, convert back to ResourceType
     for (final entry in stockMap.entries) {
-      final resourceType =
-          warehouse.stock.keys.cast<dynamic>().firstWhere(
-                (r) => r.toString().split('.').last == entry.key,
-                orElse: () => warehouse.stock.keys.first,
-              );
+      final resourceType = warehouse.stock.keys.cast<dynamic>().firstWhere(
+        (r) => r.toString().split('.').last == entry.key,
+        orElse: () => warehouse.stock.keys.first,
+      );
       if (resourceType != null) {
         warehouse.stock[resourceType] = entry.value;
       }
     }
     await saveWarehouse(warehouse);
-    print('WAREHOUSE STOCK UPDATED IN HIVE: $warehouseId');
+    debugPrint('[HIVESERVICE] WAREHOUSE STOCK UPDATED IN HIVE: $warehouseId');
   }
 
   // ==================== BUILDING PURCHASES ====================
 
   Future<void> updatePurchasedBuildings(Building building) async {
-    await _purchases.put(building.name, jsonEncode({
-      'building': building.name,
-      'cost': building.cost,
-      'count': building.count,
-    }));
-    print('PURCHASE LOGGED TO HIVE: ${building.name} x${building.count}');
+    await _purchases.put(
+      building.name,
+      jsonEncode({
+        'building': building.name,
+        'cost': building.cost,
+        'count': building.count,
+      }),
+    );
+    debugPrint(
+      '[HIVESERVICE] PURCHASE LOGGED TO HIVE: ${building.name} x${building.count}',
+    );
   }
 
   /// Saves just the building name and count (used by SaveSystem without Building object)
   Future<void> savePurchasedBuildingData(String name, int count) async {
-    await _purchases.put(name, jsonEncode({
-      'building': name,
-      'cost': 0,
-      'count': count,
-    }));
+    await _purchases.put(
+      name,
+      jsonEncode({'building': name, 'cost': 0, 'count': count}),
+    );
   }
 
   List<Map<String, dynamic>> getAllPurchases() {
@@ -124,7 +128,7 @@ class HiveService {
 
   Future<void> saveFactory(Factory factory) async {
     await _factories.put(factory.id, jsonEncode(factory.toMap()));
-    print('FACTORY SAVED TO HIVE: ${factory.id}');
+    debugPrint('[HIVESERVICE] FACTORY SAVED TO HIVE: ${factory.id}');
   }
 
   List<Factory> getAllFactories() {
@@ -135,7 +139,7 @@ class HiveService {
 
   Future<void> deleteFactory(String id) async {
     await _factories.delete(id);
-    print('FACTORY DELETED FROM HIVE: $id');
+    debugPrint('[HIVESERVICE] FACTORY DELETED FROM HIVE: $id');
   }
 
   // ==================== RESET ====================
@@ -144,11 +148,13 @@ class HiveService {
     await _factories.clear();
     await _purchases.clear();
     await _warehouses.clear();
-    await _player.put('main', jsonEncode({
-      'nickname': 'Player',
-      'money': 10000000,
-    }));
-    print('HIVE RESET COMPLETE - All data cleared, player reset to ¥100000');
+    await _player.put(
+      'main',
+      jsonEncode({'nickname': 'Player', 'money': 10000000}),
+    );
+    debugPrint(
+      '[HIVESERVICE] HIVE RESET COMPLETE - All data cleared, player reset to ¥100000',
+    );
   }
 
   // ==================== PRINT HIVE STATE ====================
@@ -156,62 +162,69 @@ class HiveService {
   /// Prints the entire Hive database state to the console.
   /// Call this after purchases or any state change to see the current data.
   void printHiveState() {
-    print('');
-    print('═══════════════════════════════════════════');
-    print('           HIVE DATABASE STATE');
-    print('═══════════════════════════════════════════');
+    debugPrint('[HIVESERVICE] ');
+    debugPrint('[HIVESERVICE] ═══════════════════════════════════════════');
+    debugPrint('[HIVESERVICE]            HIVE DATABASE STATE');
+    debugPrint('[HIVESERVICE] ═══════════════════════════════════════════');
 
     // Player
     final playerRaw = _player.get('main');
     if (playerRaw != null) {
       final player = Player.fromMap(jsonDecode(playerRaw));
-      print('📋 PLAYER: ${player.nickname} | Money: ¥${player.money}');
+      debugPrint(
+        '[HIVESERVICE] 📋 PLAYER: ${player.nickname} | Money: ¥${player.money}',
+      );
     } else {
-      print('📋 PLAYER: No player data');
+      debugPrint('[HIVESERVICE] 📋 PLAYER: No player data');
     }
 
     // Purchases
-    print('');
-    print('📦 BUILDING PURCHASES:');
+    debugPrint('[HIVESERVICE] ');
+    debugPrint('[HIVESERVICE] 📦 BUILDING PURCHASES:');
     final purchases = getAllPurchases();
     if (purchases.isEmpty) {
-      print('   (empty)');
+      debugPrint('[HIVESERVICE]    (empty)');
     } else {
       for (final p in purchases) {
-        print('   - ${p['building']}: count=${p['count']}, cost=¥${p['cost']}');
+        debugPrint(
+          '[HIVESERVICE]    - ${p['building']}: count=${p['count']}, cost=¥${p['cost']}',
+        );
       }
     }
 
     // Factories
-    print('');
-    print('🏭 FACTORIES:');
+    debugPrint('[HIVESERVICE] ');
+    debugPrint('[HIVESERVICE] 🏭 FACTORIES:');
     final factories = getAllFactories();
     if (factories.isEmpty) {
-      print('   (empty)');
+      debugPrint('[HIVESERVICE]    (empty)');
     } else {
       for (final f in factories) {
-        print(
-            '   - ${f.id}: type=${f.type.name}, active=${f.active}, efficiency=${f.efficiency}');
+        debugPrint(
+          '[HIVESERVICE]   - ${f.id}: type=${f.type.name}, active=${f.active}, efficiency=${f.efficiency}',
+        );
       }
     }
 
     // Warehouses
-    print('');
-    print('🏬 WAREHOUSES:');
+    debugPrint('[HIVESERVICE] ');
+    debugPrint('[HIVESERVICE] 🏬 WAREHOUSES:');
     final warehouses = getAllWarehouses();
     if (warehouses.isEmpty) {
-      print('   (empty)');
+      debugPrint('[HIVESERVICE]    (empty)');
     } else {
       for (final w in warehouses) {
-        print('   - ${w.id} (${w.name}): capacity=${w.capacity}');
+        debugPrint(
+          '[HIVESERVICE]    - ${w.id} (${w.name}): capacity=${w.capacity}',
+        );
         for (final entry in w.stock.entries) {
-          print('       ${entry.key.name}: ${entry.value}');
+          debugPrint('[HIVESERVICE]        ${entry.key.name}: ${entry.value}');
         }
-        print('       Logs: ${w.logs.length} entries');
+        debugPrint('[HIVESERVICE]        Logs: ${w.logs.length} entries');
       }
     }
 
-    print('═══════════════════════════════════════════');
-    print('');
+    debugPrint('[HIVESERVICE] ═══════════════════════════════════════════');
+    debugPrint('[HIVESERVICE] ');
   }
 }
