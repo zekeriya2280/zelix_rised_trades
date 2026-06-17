@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/foundation.dart';
 
+import '../database/truck_db.dart';
 import '../enums/factory_type.dart';
 import '../enums/resource_type.dart';
 import '../models/factory.dart' as models;
@@ -299,22 +300,28 @@ class GameEngine {
 
   // ---- Truck ----
 
+  /// Yeni truck oluştur (Item 16 - yeni parametreler)
   void createTruck({
     required String id,
-    required String routeId,
-    int capacity = 100,
+    required String typeId,
+    int level = 1,
   }) {
     truckSystem.createTruck(
       _state,
       id: id,
-      routeId: routeId,
-      capacity: capacity,
+      typeId: typeId,
+      level: level,
     );
     saveSystem.save(_state);
   }
 
   void assignTruckRoute(String truckId, String routeId) {
     truckSystem.assignRoute(_state, truckId, routeId);
+    saveSystem.save(_state);
+  }
+
+  void unassignTruckRoute(String truckId) {
+    truckSystem.unassignRoute(_state, truckId);
     saveSystem.save(_state);
   }
 
@@ -337,12 +344,47 @@ class GameEngine {
     );
   }
 
-  // ---- Truck UI Model / Derived Info (Engine-only) ----
+  // ---- Truck Yeni API'lar (Items 21-23) ----
+
+  /// Truck tamir et (Item 21)
+  void repairTruck(String truckId) {
+    truckSystem.repairTruck(_state, truckId);
+    saveSystem.save(_state);
+  }
+
+  /// Truck yükselt (Item 22)
+  void upgradeTruck(String truckId) {
+    truckSystem.upgradeTruck(_state, truckId);
+    saveSystem.save(_state);
+  }
+
+  /// Truck sat (Item 23)
+  void sellTruck(String truckId) {
+    truckSystem.sellTruck(_state, truckId);
+    saveSystem.save(_state);
+  }
+
+  /// Katalogdan truck satın al (para düşer + truck oluşur)
+  bool buyTruck(String typeId) {
+    final spec = TruckCatalog.getById(typeId);
+    if (spec == null) return false;
+    if (!canAfford(spec.price)) return false;
+
+    deductMoney(spec.price);
+    final newId = 'truck_${typeId}_${DateTime.now().millisecondsSinceEpoch}';
+    truckSystem.createTruck(_state, id: newId, typeId: typeId, level: 1);
+    saveSystem.save(_state);
+    _syncNotifiers();
+    debugPrint('[GameEngine] Bought truck: $typeId for ¥${spec.price}');
+    return true;
+  }
+
+  // ---- Truck UI Model / Derived Info (Item 15 - yeni getter'lar) ----
 
   int getTruckCapacity(String truckId) {
     final truck = _state.trucks.where((t) => t.id == truckId).cast<Truck?>().firstOrNull;
     if (truck == null) return 0;
-    return truck.effectiveCapacity.floor();
+    return truck.effectiveCapacity;
   }
 
   int getTruckLevel(String truckId) {
@@ -350,22 +392,17 @@ class GameEngine {
     return truck?.level ?? 1;
   }
 
-  double getTruckEffectiveSpeedMultiplier(String truckId) {
+  double getTruckEffectiveSpeed(String truckId) {
     final truck = _state.trucks.where((t) => t.id == truckId).cast<Truck?>().firstOrNull;
-    return truck?.effectiveSpeedMultiplier ?? 1.0;
+    return truck?.effectiveSpeed ?? 1.0;
   }
 
-  double getTruckFaultChance(String truckId) {
+  double getTruckFailureChance(String truckId) {
     final truck = _state.trucks.where((t) => t.id == truckId).cast<Truck?>().firstOrNull;
-    return truck?.faultChance ?? 0.0;
+    return truck?.failureChance ?? 0.0;
   }
 
-  int getTruckFaultDurationSeconds(String truckId) {
-    final truck = _state.trucks.where((t) => t.id == truckId).cast<Truck?>().firstOrNull;
-    return truck?.faultDurationSeconds ?? 0;
-  }
-
-  // Fee: UI’da yapılan basit formül yerine engine parametreleriyle hesaplanır.
+  /// Fee: UI’da yapılan basit formül
   double calculateShipmentFee({
     required int limitedAmount,
     required int cityDistanceLevel,
@@ -373,9 +410,6 @@ class GameEngine {
     const double unitPrice = 0.35;
     return cityDistanceLevel * limitedAmount * unitPrice;
   }
-
-  // Selected enum -> engineId map UI’da karmaşıklaşmasın diye burada basitleştirme yapabilirsiniz.
-  // (Şimdilik TruckScreen enum -> engine id eşlemesi kalabilir.)
 
 
   // ---- Route ----

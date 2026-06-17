@@ -1,36 +1,113 @@
+enum TruckStatus { idle, loading, moving, unloading, broken, maintenance }
+
 class Truck {
   final String id;
+  final String name;
+  final String typeId;
 
-  String routeId;
+  final int level;
+  final int baseCapacity;
+  final double baseSpeed;
+  final double baseReliability;
 
-  /// Base capacity (level'e göre efektif kapasite artar)
-  int capacity;
+  final int durability; // 0-100
+  final int mileage;    // toplam kullanım
+  final TruckStatus status;
 
-  /// Level arttıkça capacity ve speed artar, arıza ihtimali azalır.
-  int level;
+  final String? assignedRouteId;
+  final String? currentWarehouseId;
 
-  Truck({
+  const Truck({
     required this.id,
-    required this.routeId,
-    required this.capacity,
-    this.level = 1,
+    required this.name,
+    required this.typeId,
+    required this.level,
+    required this.baseCapacity,
+    required this.baseSpeed,
+    required this.baseReliability,
+    required this.durability,
+    required this.mileage,
+    required this.status,
+    this.assignedRouteId,
+    this.currentWarehouseId,
   });
 
-  /// Senin tarifine göre ~1.2x (level başına) artış yaklaşımı.
-  double get effectiveCapacity => capacity * (1.0 + 0.2 * (level - 1));
+  Truck copyWith({
+    String? id,
+    String? name,
+    String? typeId,
+    int? level,
+    int? baseCapacity,
+    double? baseSpeed,
+    double? baseReliability,
+    int? durability,
+    int? mileage,
+    TruckStatus? status,
+    String? assignedRouteId,
+    String? currentWarehouseId,
+  }) {
+    return Truck(
+      id: id ?? this.id,
+      name: name ?? this.name,
+      typeId: typeId ?? this.typeId,
+      level: level ?? this.level,
+      baseCapacity: baseCapacity ?? this.baseCapacity,
+      baseSpeed: baseSpeed ?? this.baseSpeed,
+      baseReliability: baseReliability ?? this.baseReliability,
+      durability: durability ?? this.durability,
+      mileage: mileage ?? this.mileage,
+      status: status ?? this.status,
+      assignedRouteId: assignedRouteId ?? this.assignedRouteId,
+      currentWarehouseId: currentWarehouseId ?? this.currentWarehouseId,
+    );
+  }
 
-  /// Senin tarifine göre ~1.3x (level başına) hızlanma yaklaşımı.
-  double get effectiveSpeedMultiplier => 1.0 + 0.3 * (level - 1);
+  int get effectiveCapacity => (baseCapacity * (1 + 0.2 * (level - 1))).round();
 
-  /// Arıza olasılığı level ile azalır.
-  /// (Probability: seyahat başına rastgele)
-  double get faultChance => (0.12 / level).clamp(0.0, 1.0);
+  double get effectiveSpeed => baseSpeed * (1 + 0.15 * (level - 1));
 
-  /// Arıza süresi (bekleme) - level arttıkça azalır.
-  int get faultDurationSeconds => (10.0 / level).round().clamp(1, 20);
+  double get failureChance {
+    final wearPenalty = (100 - durability) / 200.0;
+    final levelBonus = 0.12 / level;
+    return (levelBonus + wearPenalty).clamp(0.0, 1.0);
+  }
 
-  @override
-  String toString() {
-    return 'Truck{id: $id, routeId: $routeId, level: $level, capacity: $capacity}';
+  // ==================== Serialization ====================
+
+  Map<String, dynamic> toJson() {
+    return {
+      'id': id,
+      'name': name,
+      'typeId': typeId,
+      'level': level,
+      'baseCapacity': baseCapacity,
+      'baseSpeed': baseSpeed,
+      'baseReliability': baseReliability,
+      'durability': durability,
+      'mileage': mileage,
+      'status': status.name,
+      'assignedRouteId': assignedRouteId,
+      'currentWarehouseId': currentWarehouseId,
+    };
+  }
+
+  factory Truck.fromJson(Map<String, dynamic> json) {
+    return Truck(
+      id: json['id'] as String,
+      name: json['name'] as String,
+      typeId: json['typeId'] as String,
+      level: json['level'] as int,
+      baseCapacity: json['baseCapacity'] as int,
+      baseSpeed: (json['baseSpeed'] as num).toDouble(),
+      baseReliability: (json['baseReliability'] as num).toDouble(),
+      durability: json['durability'] as int,
+      mileage: json['mileage'] as int,
+      status: TruckStatus.values.firstWhere(
+        (s) => s.name == json['status'],
+        orElse: () => TruckStatus.idle,
+      ),
+      assignedRouteId: json['assignedRouteId'] as String?,
+      currentWarehouseId: json['currentWarehouseId'] as String?,
+    );
   }
 }

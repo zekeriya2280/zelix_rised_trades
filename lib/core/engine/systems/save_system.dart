@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart';
 
+import '../../database/truck_db.dart';
 import '../../models/city.dart';
 import '../../models/player.dart';
 import '../../models/route_model.dart';
@@ -59,6 +60,9 @@ class SaveSystem extends ChangeNotifier implements ISystem {
         await _hive.savePurchasedBuildingData(entry.key, entry.value);
       }
 
+      // Truckları kaydet
+      await _hive.saveAllTrucks(state.trucks);
+
       _lastSaveTime = DateTime.now();
       debugPrint('[SaveSystem] Game saved at $_lastSaveTime');
     } catch (e) {
@@ -91,7 +95,19 @@ class SaveSystem extends ChangeNotifier implements ISystem {
       }
     }
 
-    final trucks = <Truck>[];
+    // Truckları yükle
+    List<Truck> trucks;
+    final savedTrucks = _hive.getAllTrucks();
+    if (savedTrucks.isNotEmpty) {
+      // Kayıtlı truck varsa onları yükle
+      trucks = savedTrucks;
+      debugPrint('[SaveSystem] Loaded ${trucks.length} trucks from save');
+    } else {
+      // Kayıt yoksa starter truck oluştur (initial state)
+      trucks = _createInitialTrucks();
+      debugPrint('[SaveSystem] Created ${trucks.length} initial trucks');
+    }
+
     final routes = <RouteModel>[];
     final cities = <City>[];
 
@@ -104,6 +120,27 @@ class SaveSystem extends ChangeNotifier implements ISystem {
       cities: cities,
       purchasedBuildings: purchasedBuildings,
     );
+  }
+
+  /// Başlangıç trucklarını oluştur - oyuncunun ilk truck filosu
+  List<Truck> _createInitialTrucks() {
+    final starterSpecs = ['small', 'medium'];
+    return starterSpecs.map((specId) {
+      final spec = TruckCatalog.getById(specId);
+      if (spec == null) return null;
+      return Truck(
+        id: 'truck_${spec.id}_${DateTime.now().millisecondsSinceEpoch}',
+        name: spec.name,
+        typeId: spec.id,
+        level: 1,
+        baseCapacity: spec.baseCapacity,
+        baseSpeed: spec.baseSpeed,
+        baseReliability: spec.baseReliability,
+        durability: 100,
+        mileage: 0,
+        status: TruckStatus.idle,
+      );
+    }).whereType<Truck>().toList();
   }
 
   Future<void> deleteFactory(GameState state, String factoryId) async {
@@ -138,5 +175,4 @@ class SaveSystem extends ChangeNotifier implements ISystem {
   void printDebugState(GameState state) {
     _hive.printHiveState();
   }
-
 }

@@ -3,8 +3,9 @@ import 'package:zelix_rised_trades/core/engine/game_engine.dart';
 import 'package:zelix_rised_trades/core/enums/factory_type.dart';
 import 'package:zelix_rised_trades/screens/factory_screen.dart';
 import 'package:zelix_rised_trades/screens/hive_screen.dart';
-import 'package:zelix_rised_trades/screens/route_screen.dart';
-import 'package:zelix_rised_trades/screens/truck_screen.dart';
+import 'package:zelix_rised_trades/screens/route_management_screen.dart';
+import 'package:zelix_rised_trades/screens/transport_screen.dart';
+import 'package:zelix_rised_trades/screens/truck_management_screen.dart';
 import 'package:zelix_rised_trades/screens/warehouse_screen.dart';
 
 
@@ -223,10 +224,29 @@ class _BuildingShopScreenState extends State<BuildingShopScreen> {
                       ),
                     ),
                     IconButton(
+                      icon: const Icon(Icons.move_down, color: Colors.black54),
+                      tooltip: 'Transports',
+                      onPressed: () {
+                        final trucks = _engine.state.trucks;
+                        if (trucks.isEmpty) {
+                          _showSnack('No trucks purchased yet!', Colors.red);
+                          return;
+                        }
+                        final firstTruckId = trucks.first.id;
+                        Navigator.of(context).push(
+                          MaterialPageRoute(
+                            builder: (context) => TransportScreen(truckId: firstTruckId),
+                          ),
+                        );
+                      },),
+                    	                    
+                      
+                    
+                    IconButton(
                       icon: const Icon(Icons.local_shipping, color: Colors.black54),
                       tooltip: 'Trucks',
                       onPressed: () => Navigator.of(context).push(
-                        MaterialPageRoute(builder: (context) => const TruckScreen()),
+                        MaterialPageRoute(builder: (context) => const TruckManagementScreen()),
                       ),
                     ),
                     IconButton(

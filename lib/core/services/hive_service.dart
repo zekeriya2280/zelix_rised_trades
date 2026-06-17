@@ -5,6 +5,7 @@ import 'package:hive_flutter/hive_flutter.dart';
 import 'package:zelix_rised_trades/core/models/building.dart';
 import 'package:zelix_rised_trades/core/models/factory.dart';
 import 'package:zelix_rised_trades/core/models/player.dart';
+import 'package:zelix_rised_trades/core/models/truck.dart';
 import 'package:zelix_rised_trades/core/models/warehouse.dart';
 
 /// Singleton service that manages all game data using Hive local storage.
@@ -18,6 +19,7 @@ class HiveService {
   static const String _warehousesBox = 'warehouses_box';
   static const String _factoriesBox = 'factories_box';
   static const String _purchasesBox = 'purchases_box';
+  static const String _trucksBox = 'trucks_box';
 
   bool _initialized = false;
 
@@ -28,6 +30,7 @@ class HiveService {
     await Hive.openBox(_warehousesBox);
     await Hive.openBox(_factoriesBox);
     await Hive.openBox(_purchasesBox);
+    await Hive.openBox(_trucksBox);
     _initialized = true;
     debugPrint('[HIVESERVICE] HIVE SERVICE INITIALIZED');
   }
@@ -36,6 +39,7 @@ class HiveService {
   Box get _warehouses => Hive.box(_warehousesBox);
   Box get _factories => Hive.box(_factoriesBox);
   Box get _purchases => Hive.box(_purchasesBox);
+  Box get _trucks => Hive.box(_trucksBox);
 
   // ==================== PLAYER ====================
 
@@ -144,10 +148,44 @@ class HiveService {
 
   // ==================== RESET ====================
 
+  // ==================== TRUCKS ====================
+
+  Future<void> saveTruck(Truck truck) async {
+    await _trucks.put(truck.id, jsonEncode(truck.toJson()));
+    debugPrint('[HIVESERVICE] TRUCK SAVED TO HIVE: ${truck.id}');
+  }
+
+  Truck? getTruck(String id) {
+    final raw = _trucks.get(id);
+    if (raw == null) return null;
+    return Truck.fromJson(jsonDecode(raw));
+  }
+
+  List<Truck> getAllTrucks() {
+    return _trucks.values.map((raw) {
+      return Truck.fromJson(jsonDecode(raw));
+    }).toList();
+  }
+
+  Future<void> deleteTruck(String id) async {
+    await _trucks.delete(id);
+    debugPrint('[HIVESERVICE] TRUCK DELETED FROM HIVE: $id');
+  }
+
+  Future<void> saveAllTrucks(List<Truck> trucks) async {
+    await _trucks.clear();
+    for (final truck in trucks) {
+      await _trucks.put(truck.id, jsonEncode(truck.toJson()));
+    }
+  }
+
+  // ==================== RESET ====================
+
   Future<void> resetAll() async {
     await _factories.clear();
     await _purchases.clear();
     await _warehouses.clear();
+    await _trucks.clear();
     await _player.put(
       'main',
       jsonEncode({'nickname': 'Player', 'money': 10000000}),
