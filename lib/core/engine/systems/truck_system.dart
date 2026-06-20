@@ -180,6 +180,10 @@ class TruckSystem extends ChangeNotifier implements ISystem {
     required String routeId,
     String reason = 'transport',
   }) {
+    if (fromWarehouseId == toWarehouseId) {
+      debugPrint('[TruckSystem] Shipment rejected: from and to must be different');
+      return;
+    }
     final hasDepot = (state.purchasedBuildings['Truck Depot'] ?? 0) > 0;
     if (!hasDepot) {
       debugPrint('[TruckSystem] Shipment rejected: Truck Depot is not owned');

@@ -23,15 +23,28 @@ class TransportScreen extends StatefulWidget {
 class _TransportScreenState extends State<TransportScreen> {
   final GameEngine _engine = GameEngine();
 
+  // Warehouse UI'dan kaldırıldı. Warehouse verisi engine tarafında kalsın.
   List<Warehouse> _warehouses = [];
+
+  // Engine requestShipment() şimdilik warehouse id beklediği için geçici olarak tutuluyor.
+  // Bu değerler UI'da kullanılmıyor; şehir seçiminden sevkiyat başlatılacak şekilde düzenlenecek.
+  String? _fromWarehouseId;
+  String? _toWarehouseId;
+
+
+
+  // From/to şehir üzerinden yapılacak.
+
+
   List<Truck> _trucks = [];
 
   String? _selectedTruckId;
 
-  String? _fromWarehouseId;
-
-  String? _toWarehouseId;
+  // City selection
+  CityList? _fromCity;
+  CityList? _toCity;
   CityList? _selectedCity;
+
   ResourceType _resourceType = ResourceType.wood;
   int _amount = 1;
 
@@ -110,23 +123,16 @@ class _TransportScreenState extends State<TransportScreen> {
       }
     }
 
-    if (_warehouses.isNotEmpty) {
-      _fromWarehouseId ??= _warehouses.first.id;
-      _toWarehouseId ??= _warehouses.length > 1
-            ? _warehouses.last.id
-            : _warehouses.first.id;
-
-      // If user accidentally selected same from/to, auto-fix to different when possible
-      if (_warehouses.length > 1 &&
-          _fromWarehouseId != null &&
-          _toWarehouseId != null &&
-          _fromWarehouseId == _toWarehouseId) {
-        _toWarehouseId = _warehouses.firstWhere((w) => w.id != _fromWarehouseId!).id;
-      }
+    // city defaults (UI tarafında)
+    if (_selectedCity == null) {
+      _fromCity ??= CityList.city1;
+      _toCity ??= CityList.city2;
+      _selectedCity = _toCity;
     }
 
     _amount = _amount.clamp(1, _truckCapacity);
     setState(() {});
+
   }
 
 
@@ -136,16 +142,18 @@ class _TransportScreenState extends State<TransportScreen> {
       _showSnack('Truck Depot required!', Colors.red);
       return;
     }
-    if (_fromWarehouseId == null || _toWarehouseId == null) {
-      _showSnack('Select from/to warehouse', Colors.red);
+    if (_fromCity == null || _toCity == null) {
+      _showSnack('Select from/to city', Colors.red);
       return;
     }
-    if (_fromWarehouseId == _toWarehouseId) {
+    if (_fromCity == _toCity) {
       _showSnack('From and To must be different', Colors.orange);
+      debugPrint('[TransportScreen] from==to ($_fromCity). Fix UI selection first.');
       return;
     }
 
     // Engine üzerinden sevkiyatı başlat
+
     // assignTruckRoute → assignedRouteId + status:loading yapar
     // requestShipment → pendingShipments'a ekler, tick'te işlenir
     final routeId = 'route_${DateTime.now().millisecondsSinceEpoch}';
@@ -158,8 +166,10 @@ class _TransportScreenState extends State<TransportScreen> {
 
 
     _engine.requestShipment(
-      fromWarehouseId: _fromWarehouseId!,
-      toWarehouseId: _toWarehouseId!,
+      // From şehir -> global warehouse depolarından (engine'in seçtiği) gidilecek gibi kurgulanır.
+      fromWarehouseId: _warehouses.isNotEmpty ? _warehouses.first.id : 'unknown',
+      toWarehouseId: _warehouses.isNotEmpty ? _warehouses.first.id : 'unknown',
+
       resourceType: _resourceType,
       amount: _limitedAmount,
       routeId: routeId,
