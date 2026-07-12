@@ -162,22 +162,73 @@ class _TransportScreenState extends State<TransportScreen> {
       _showSnack('No truck selected', Colors.red);
       return;
     }
-    _engine.assignTruckRoute(selectedId, routeId);
+    // Transport sadece warehouse dropdown'ları üzerinden çalışsın.
+    // City -> warehouse mapping'i yanlış/tesadüfi olduğu için shipment'a etki etmesin.
+    final fromWarehouseId = _fromWarehouseId;
+    var toWarehouseId = _toWarehouseId;
+
+    if (fromWarehouseId == null || toWarehouseId == null) {
+      _showSnack('Select From and To warehouses', Colors.red);
+      return;
+    }
+
+    if (fromWarehouseId == toWarehouseId) {
+      _showSnack('From and To warehouses must be different', Colors.orange);
+      return;
+    }
 
 
+
+    // Ön kontroller (bug/roundtrip önlemek için)
+    final fromWarehouse = _engine.state.getWarehouse(fromWarehouseId);
+    final toWarehouse = _engine.state.getWarehouse(toWarehouseId);
+    if (fromWarehouse == null || toWarehouse == null) {
+      _showSnack('No warehouse available for transport', Colors.red);
+      return;
+    }
+
+    // Odun/ilgili resource var mı?
+    final have = fromWarehouse.get(_resourceType);
+    if (have < _limitedAmount) {
+      _showSnack('Not enough ${_resourceType.name} in From Warehouse', Colors.orange);
+      return;
+    }
+
+    // To warehouse kapasite var mı?
+    if (!toWarehouse.canAdd(_limitedAmount)) {
+      _showSnack('To Warehouse is full', Colors.orange);
+      return;
+    }
+
+    // GameEngine requestShipment shippping’i zaten Truck Depot ve from!=to kontrol eder.
     _engine.requestShipment(
-      // From şehir -> global warehouse depolarından (engine'in seçtiği) gidilecek gibi kurgulanır.
-      fromWarehouseId: _warehouses.isNotEmpty ? _warehouses.first.id : 'unknown',
-      toWarehouseId: _warehouses.isNotEmpty ? _warehouses.first.id : 'unknown',
-
+      fromWarehouseId: fromWarehouseId,
+      toWarehouseId: toWarehouseId,
       resourceType: _resourceType,
       amount: _limitedAmount,
       routeId: routeId,
       reason:
-          'transport (city=$_selectedCityDistanceLevel fee=¥${_fee.toStringAsFixed(0)})',
+          'transport (cityLevel=$_selectedCityDistanceLevel fee=¥${_fee.toStringAsFixed(0)})',
     );
 
+
+    // Bu noktadan sonra truck route atama yapıyoruz.
+    _engine.assignTruckRoute(selectedId, routeId);
+
+
+    // Shipment reddedilirse (engine kontrolü), truck status'ü loading'de kalmasın.
+    // 1 tick sonra (1sn) hala loading ise revert ediyoruz.
+    Future.delayed(const Duration(seconds: 1), () {
+      if (!mounted) return;
+      final truckNow = _trucks.where((t) => t.id == selectedId).cast<Truck?>().firstOrNull;
+      final stillLoading = truckNow?.status == TruckStatus.loading || truckNow?.status == TruckStatus.unloading;
+      if (stillLoading) {
+        _engine.unassignTruckRoute(selectedId);
+      }
+    });
+
     _showSnack('🚚 ${_truck?.name ?? "Truck"} en route!', Colors.green);
+
 
     // Bir süre sonra geri dön
     Future.delayed(const Duration(seconds: 1), () {
