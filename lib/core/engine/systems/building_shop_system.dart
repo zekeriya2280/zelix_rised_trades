@@ -56,6 +56,8 @@ class BuildingShopSystem extends ChangeNotifier implements ISystem {
     required int baseCost,
     required FactoryType? factoryType,
     required int warehouseCapacity,
+    String warehouseType = 'Kaizen',
+    int truckCapacity = 1,
     required PlayerSystem playerSystem,
     required FactorySystem factorySystem,
     required WarehouseSystem warehouseSystem,
@@ -79,8 +81,10 @@ class BuildingShopSystem extends ChangeNotifier implements ISystem {
       warehouseSystem.ensureWarehouseExists(
         state,
         id: 'w${DateTime.now().millisecondsSinceEpoch}',
-        name: 'Warehouse #${currentCount + 1}',
+        name: '$buildingName #${currentCount + 1}',
         capacity: warehouseCapacity,
+        type: warehouseType,
+        truckCapacity: truckCapacity,
       );
     } else if (type == 'factory') {
       if (factoryType == null) return false;

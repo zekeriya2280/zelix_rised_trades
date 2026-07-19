@@ -26,10 +26,7 @@ class _TransportScreenState extends State<TransportScreen> {
   // Warehouse UI'dan kaldırıldı. Warehouse verisi engine tarafında kalsın.
   List<Warehouse> _warehouses = [];
 
-  // Engine requestShipment() şimdilik warehouse id beklediği için geçici olarak tutuluyor.
-  // Bu değerler UI'da kullanılmıyor; şehir seçiminden sevkiyat başlatılacak şekilde düzenlenecek.
   String? _fromWarehouseId;
-  String? _toWarehouseId;
 
 
 
@@ -125,9 +122,18 @@ class _TransportScreenState extends State<TransportScreen> {
 
     // city defaults (UI tarafında)
     if (_selectedCity == null) {
-      _fromCity ??= CityList.city1;
-      _toCity ??= CityList.city2;
+      _fromCity ??= CityList.Tokyo;
+      _toCity ??= CityList.Chiba;
       _selectedCity = _toCity;
+    }
+
+    // Auto-initialize warehouse dropdowns so transport can start immediately.
+    if (_warehouses.isNotEmpty) {
+      _fromWarehouseId ??= _warehouses.first.id;
+      // Seçili warehouselar artık listede yoksa resetle
+      if (!_warehouses.any((w) => w.id == _fromWarehouseId)) {
+        _fromWarehouseId = _warehouses.first.id;
+      }
     }
 
     _amount = _amount.clamp(1, _truckCapacity);
@@ -142,13 +148,9 @@ class _TransportScreenState extends State<TransportScreen> {
       _showSnack('Truck Depot required!', Colors.red);
       return;
     }
-    if (_fromCity == null || _toCity == null) {
-      _showSnack('Select from/to city', Colors.red);
-      return;
-    }
-    if (_fromCity == _toCity) {
-      _showSnack('From and To must be different', Colors.orange);
-      debugPrint('[TransportScreen] from==to ($_fromCity). Fix UI selection first.');
+    // Destination city seçimi: _selectedCity (To City dropdown'ından)
+    if (_selectedCity == null) {
+      _showSnack('Select destination city', Colors.red);
       return;
     }
 
@@ -162,27 +164,16 @@ class _TransportScreenState extends State<TransportScreen> {
       _showSnack('No truck selected', Colors.red);
       return;
     }
-    // Transport sadece warehouse dropdown'ları üzerinden çalışsın.
-    // City -> warehouse mapping'i yanlış/tesadüfi olduğu için shipment'a etki etmesin.
+    
     final fromWarehouseId = _fromWarehouseId;
-    var toWarehouseId = _toWarehouseId;
-
-    if (fromWarehouseId == null || toWarehouseId == null) {
-      _showSnack('Select From and To warehouses', Colors.red);
+    if (fromWarehouseId == null) {
+      _showSnack('Select From warehouse', Colors.red);
       return;
     }
-
-    if (fromWarehouseId == toWarehouseId) {
-      _showSnack('From and To warehouses must be different', Colors.orange);
-      return;
-    }
-
-
 
     // Ön kontroller (bug/roundtrip önlemek için)
     final fromWarehouse = _engine.state.getWarehouse(fromWarehouseId);
-    final toWarehouse = _engine.state.getWarehouse(toWarehouseId);
-    if (fromWarehouse == null || toWarehouse == null) {
+    if (fromWarehouse == null) {
       _showSnack('No warehouse available for transport', Colors.red);
       return;
     }
@@ -194,16 +185,9 @@ class _TransportScreenState extends State<TransportScreen> {
       return;
     }
 
-    // To warehouse kapasite var mı?
-    if (!toWarehouse.canAdd(_limitedAmount)) {
-      _showSnack('To Warehouse is full', Colors.orange);
-      return;
-    }
-
-    // GameEngine requestShipment shippping’i zaten Truck Depot ve from!=to kontrol eder.
     _engine.requestShipment(
       fromWarehouseId: fromWarehouseId,
-      toWarehouseId: toWarehouseId,
+      destinationCity: _selectedCity!,
       resourceType: _resourceType,
       amount: _limitedAmount,
       routeId: routeId,
@@ -211,27 +195,21 @@ class _TransportScreenState extends State<TransportScreen> {
           'transport (cityLevel=$_selectedCityDistanceLevel fee=¥${_fee.toStringAsFixed(0)})',
     );
 
+    // Rota oluştur
+    _engine.createRoute(
+      id: routeId,
+      source: fromWarehouse.name,
+      destination: _selectedCity!.name,
+      trucks: 1,
+    );
 
-    // Bu noktadan sonra truck route atama yapıyoruz.
+    // Truck'a rota ata — engine bir tick sonra sevkiyatı işler ve truck'u idle'a döndürür.
     _engine.assignTruckRoute(selectedId, routeId);
-
-
-    // Shipment reddedilirse (engine kontrolü), truck status'ü loading'de kalmasın.
-    // 1 tick sonra (1sn) hala loading ise revert ediyoruz.
-    Future.delayed(const Duration(seconds: 1), () {
-      if (!mounted) return;
-      final truckNow = _trucks.where((t) => t.id == selectedId).cast<Truck?>().firstOrNull;
-      final stillLoading = truckNow?.status == TruckStatus.loading || truckNow?.status == TruckStatus.unloading;
-      if (stillLoading) {
-        _engine.unassignTruckRoute(selectedId);
-      }
-    });
 
     _showSnack('🚚 ${_truck?.name ?? "Truck"} en route!', Colors.green);
 
-
     // Bir süre sonra geri dön
-    Future.delayed(const Duration(seconds: 1), () {
+    Future.delayed(const Duration(seconds: 2), () {
       if (mounted) Navigator.of(context).pop(true);
     });
   }
@@ -247,11 +225,7 @@ class _TransportScreenState extends State<TransportScreen> {
     );
   }
 
-  String? _selectedCityEnumToWarehouseId(CityList cityEnum) {
-    if (_warehouses.isEmpty) return null;
-    final idx = cityEnum.index.clamp(0, _warehouses.length - 1);
-    return _warehouses[idx].id;
-  }
+
 
   Color _statusColor(TruckStatus status) {
     switch (status) {
@@ -436,6 +410,7 @@ class _TransportScreenState extends State<TransportScreen> {
 
                         // From Warehouse
                         DropdownButtonFormField<String>(
+                          key: ValueKey('from_wh_$_fromWarehouseId'),
                           initialValue: _fromWarehouseId,
                           decoration: const InputDecoration(
                             labelText: 'From Warehouse',
@@ -449,55 +424,25 @@ class _TransportScreenState extends State<TransportScreen> {
                           onChanged: (v) {
                             setState(() {
                               _fromWarehouseId = v;
-                              // keep from/to different when possible
-                              if (_warehouses.length > 1 &&
-                                  _fromWarehouseId != null &&
-                                  _toWarehouseId != null &&
-                                  _fromWarehouseId == _toWarehouseId) {
-                                _toWarehouseId = _warehouses
-                                        .firstWhere((w) => w.id != _fromWarehouseId)
-                                        .id;
-                              }
                             });
                           },
                         ),
-                        const SizedBox(height: 12),
-
-                        // To City
+                        // To City (Destination)
                         DropdownButtonFormField<CityList>(
                           initialValue: _selectedCity,
                           decoration: const InputDecoration(
-                            labelText: 'To City',
+                            labelText: 'Destination City',
                             prefixIcon: Icon(Icons.location_city),
                             border: OutlineInputBorder(),
                           ),
                           items: CityList.values
                               .map((c) => DropdownMenuItem(
                                     value: c,
-                                    child: Text(
-                                        c.toString().split('.').last),
+                                    child: Text(c.toString().split('.').last),
                                   ))
                               .toList(),
                           onChanged: (v) {
-                            setState(() {
-                              _selectedCity = v;
-                              if (v != null) {
-                                final fromId = _fromWarehouseId;
-                                var targetId = _selectedCityEnumToWarehouseId(v);
-
-                                // Guarantee from != to when possible
-                                if (targetId != null &&
-                                    fromId != null &&
-                                    _warehouses.length > 1 &&
-                                    targetId == fromId) {
-                                  targetId = _warehouses
-                                      .firstWhere((w) => w.id != fromId)
-                                      .id;
-                                }
-
-                                _toWarehouseId = targetId;
-                              }
-                            });
+                            setState(() => _selectedCity = v);
                           },
                         ),
                         const SizedBox(height: 12),

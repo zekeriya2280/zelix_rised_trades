@@ -52,16 +52,30 @@ class _BuildingShopScreenState extends State<BuildingShopScreen> {
       type: 'factory',
     ),
     _BuildingInfo(
-      name: 'Warehouse',
+      name: 'Kaizen Warehouse',
       emoji: '🏭',
-      description: 'Increases storage capacity',
-      baseCost: 50000,
+      description: 'Cap: 300 | Truck Cap: 1',
+      baseCost: 30000,
+      type: 'warehouse',
+    ),
+    _BuildingInfo(
+      name: 'ChuuJou Warehouse',
+      emoji: '🏢',
+      description: 'Cap: 700 | Truck Cap: 3',
+      baseCost: 60000,
+      type: 'warehouse',
+    ),
+    _BuildingInfo(
+      name: 'Koutou Warehouse',
+      emoji: '🏰',
+      description: 'Cap: 1500 | Truck Cap: 6',
+      baseCost: 120000,
       type: 'warehouse',
     ),
     _BuildingInfo(
       name: 'Truck Depot',
       emoji: '🚚',
-      description: 'Required to start warehouse → city transport',
+      description: 'Required to start transport',
       baseCost: 120000,
       type: 'depot',
     ),
@@ -102,12 +116,32 @@ class _BuildingShopScreenState extends State<BuildingShopScreen> {
       return;
     }
 
+    int capacity = 500;
+    String warehouseType = 'Kaizen';
+    int truckCapacity = 1;
+
+    if (building.name == 'Kaizen Warehouse') {
+      capacity = 300;
+      warehouseType = 'Kaizen';
+      truckCapacity = 1;
+    } else if (building.name == 'ChuuJou Warehouse') {
+      capacity = 700;
+      warehouseType = 'ChuuJou';
+      truckCapacity = 3;
+    } else if (building.name == 'Koutou Warehouse') {
+      capacity = 1500;
+      warehouseType = 'Koutou';
+      truckCapacity = 6;
+    }
+
     final purchaseOk = await _engine.buyBuilding(
       buildingName: building.name,
       baseCost: building.baseCost,
       type: building.type,
       factoryType: _getFactoryType(building.name),
-      warehouseCapacity: 500,
+      warehouseCapacity: capacity,
+      warehouseType: warehouseType,
+      truckCapacity: truckCapacity,
     );
 
     if (purchaseOk != true) {

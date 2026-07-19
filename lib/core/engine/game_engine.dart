@@ -5,6 +5,7 @@ import 'package:flutter/foundation.dart';
 import '../database/truck_db.dart';
 import '../enums/factory_type.dart';
 import '../enums/resource_type.dart';
+import '../enums/city_list.dart';
 import '../models/factory.dart' as models;
 import '../models/player.dart';
 import '../models/warehouse.dart';
@@ -237,12 +238,16 @@ class GameEngine {
     required String id,
     required String name,
     required int capacity,
+    String type = 'Kaizen',
+    int truckCapacity = 1,
   }) {
     final warehouse = warehouseSystem.ensureWarehouseExists(
       _state,
       id: id,
       name: name,
       capacity: capacity,
+      type: type,
+      truckCapacity: truckCapacity,
     );
     saveSystem.save(_state);
     return warehouse;
@@ -327,7 +332,7 @@ class GameEngine {
 
   void requestShipment({
     required String fromWarehouseId,
-    required String toWarehouseId,
+    required CityList destinationCity,
     required ResourceType resourceType,
     required int amount,
     required String routeId,
@@ -336,7 +341,7 @@ class GameEngine {
     truckSystem.requestShipment(
       _state,
       fromWarehouseId: fromWarehouseId,
-      toWarehouseId: toWarehouseId,
+      destinationCity: destinationCity,
       resourceType: resourceType,
       amount: amount,
       routeId: routeId,
@@ -471,6 +476,8 @@ class GameEngine {
     required int baseCost,
     required FactoryType? factoryType,
     required int warehouseCapacity,
+    String warehouseType = 'Kaizen',
+    int truckCapacity = 1,
   }) {
     return buildingShopSystem.buyBuilding(
       _state,
@@ -479,6 +486,8 @@ class GameEngine {
       baseCost: baseCost,
       factoryType: factoryType,
       warehouseCapacity: warehouseCapacity,
+      warehouseType: warehouseType,
+      truckCapacity: truckCapacity,
       playerSystem: playerSystem,
       factorySystem: factorySystem,
       warehouseSystem: warehouseSystem,

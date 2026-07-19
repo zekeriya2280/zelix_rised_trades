@@ -54,6 +54,9 @@ class Warehouse {
 
   int capacity;
 
+  final String type; // 'Kaizen' | 'ChuuJou' | 'Koutou'
+  final int truckCapacity;
+
   final Map<ResourceType, int> stock;
 
   final List<WarehouseLog> logs;
@@ -63,6 +66,8 @@ class Warehouse {
     required this.name,
     required this.capacity,
     required this.stock,
+    this.type = 'Kaizen',
+    this.truckCapacity = 1,
     List<WarehouseLog>? logs,
   }) : logs = logs ?? [];
 
@@ -162,6 +167,8 @@ class Warehouse {
       'id': id,
       'name': name,
       'capacity': capacity,
+      'type': type,
+      'truckCapacity': truckCapacity,
       'stock': stock.map((key, value) => MapEntry(key.name, value)),
       'logs': logs.map((log) => log.toMap()).toList(),
     };
@@ -187,6 +194,8 @@ class Warehouse {
       id: map['id'] as String,
       name: map['name'] as String,
       capacity: map['capacity'] as int,
+      type: map['type'] as String? ?? 'Kaizen',
+      truckCapacity: map['truckCapacity'] as int? ?? 1,
       stock: stockMap,
       logs: logs,
     );

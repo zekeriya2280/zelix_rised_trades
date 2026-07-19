@@ -1,5 +1,8 @@
 enum TruckStatus { idle, loading, moving, unloading, broken, maintenance }
 
+/// Sentinel object used in copyWith to distinguish "not provided" from null.
+const _unset = Object();
+
 class Truck {
   final String id;
   final String name;
@@ -43,8 +46,10 @@ class Truck {
     int? durability,
     int? mileage,
     TruckStatus? status,
-    String? assignedRouteId,
-    String? currentWarehouseId,
+    // Use the _unset sentinel to keep the current value, or pass null explicitly
+    // to clear these fields.
+    Object? assignedRouteId = _unset,
+    Object? currentWarehouseId = _unset,
   }) {
     return Truck(
       id: id ?? this.id,
@@ -57,8 +62,12 @@ class Truck {
       durability: durability ?? this.durability,
       mileage: mileage ?? this.mileage,
       status: status ?? this.status,
-      assignedRouteId: assignedRouteId ?? this.assignedRouteId,
-      currentWarehouseId: currentWarehouseId ?? this.currentWarehouseId,
+      assignedRouteId: identical(assignedRouteId, _unset)
+          ? this.assignedRouteId
+          : assignedRouteId as String?,
+      currentWarehouseId: identical(currentWarehouseId, _unset)
+          ? this.currentWarehouseId
+          : currentWarehouseId as String?,
     );
   }
 

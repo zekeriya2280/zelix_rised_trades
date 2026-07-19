@@ -27,6 +27,8 @@ class WarehouseSystem extends ChangeNotifier implements ISystem {
     required String id,
     required String name,
     required int capacity,
+    String type = 'Kaizen',
+    int truckCapacity = 1,
     Map<ResourceType, int>? initialStock,
   }) {
     if (state.getWarehouse(id) != null) {
@@ -38,6 +40,8 @@ class WarehouseSystem extends ChangeNotifier implements ISystem {
       id: id,
       name: name,
       capacity: capacity,
+      type: type,
+      truckCapacity: truckCapacity,
       stock: initialStock ?? {
         ResourceType.wood: 0,
         ResourceType.lumber: 0,
@@ -47,7 +51,7 @@ class WarehouseSystem extends ChangeNotifier implements ISystem {
 
     state.addWarehouse(warehouse);
     notifyListeners();
-    debugPrint('[WarehouseSystem] Created: $id ($name) - capacity: $capacity');
+    debugPrint('[WarehouseSystem] Created: $id ($name) - capacity: $capacity, type: $type, truckCapacity: $truckCapacity');
     return warehouse;
   }
 
@@ -57,6 +61,8 @@ class WarehouseSystem extends ChangeNotifier implements ISystem {
     required String id,
     required String name,
     required int capacity,
+    String type = 'Kaizen',
+    int truckCapacity = 1,
   }) {
     var warehouse = state.getWarehouse(id);
     warehouse ??= createWarehouse(
@@ -64,6 +70,8 @@ class WarehouseSystem extends ChangeNotifier implements ISystem {
         id: id,
         name: name,
         capacity: capacity,
+        type: type,
+        truckCapacity: truckCapacity,
       );
     return warehouse!;
   }
