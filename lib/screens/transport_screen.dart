@@ -15,7 +15,6 @@ class TransportScreen extends StatefulWidget {
 
   const TransportScreen({super.key, required this.truckId});
 
-
   @override
   State<TransportScreen> createState() => _TransportScreenState();
 }
@@ -28,10 +27,7 @@ class _TransportScreenState extends State<TransportScreen> {
 
   String? _fromWarehouseId;
 
-
-
   // From/to şehir üzerinden yapılacak.
-
 
   List<Truck> _trucks = [];
 
@@ -53,7 +49,6 @@ class _TransportScreenState extends State<TransportScreen> {
       return null;
     }
   }
-
 
   int get _truckCapacity => _truck?.effectiveCapacity ?? 100;
   int get _limitedAmount => _amount.clamp(1, _truckCapacity);
@@ -138,10 +133,7 @@ class _TransportScreenState extends State<TransportScreen> {
 
     _amount = _amount.clamp(1, _truckCapacity);
     setState(() {});
-
   }
-
-
 
   void _startTransport() {
     if (!_hasTruckDepot) {
@@ -164,7 +156,7 @@ class _TransportScreenState extends State<TransportScreen> {
       _showSnack('No truck selected', Colors.red);
       return;
     }
-    
+
     final fromWarehouseId = _fromWarehouseId;
     if (fromWarehouseId == null) {
       _showSnack('Select From warehouse', Colors.red);
@@ -178,13 +170,65 @@ class _TransportScreenState extends State<TransportScreen> {
       return;
     }
 
-    // Odun/ilgili resource var mı?
+    // Warehouse'daki materyal kontrolü
     final have = fromWarehouse.get(_resourceType);
     if (have < _limitedAmount) {
-      _showSnack('Not enough ${_resourceType.name} in From Warehouse', Colors.orange);
+      _showSnack(
+        'Not enough ${_resourceType.name} in From Warehouse. Available: $have',
+        Colors.orange,
+      );
       return;
     }
 
+    // Truck capacity kontrolü
+    final truckCapacity = _truckCapacity;
+    if (_limitedAmount > truckCapacity) {
+      _showSnack(
+        'Amount ($_limitedAmount) exceeds truck capacity ($truckCapacity)',
+        Colors.orange,
+      );
+      return;
+    }
+
+    // Warehouse truck capacity kontrolü (active trucks)
+    final activeTrucksCount = _engine.state.trucks
+        .where(
+          (t) =>
+              t.currentWarehouseId == fromWarehouseId &&
+              (t.status == TruckStatus.loading ||
+                  t.status == TruckStatus.moving ||
+                  t.status == TruckStatus.unloading),
+        )
+        .length;
+
+    if (activeTrucksCount >= fromWarehouse.truckCapacity) {
+      _showSnack(
+        'Warehouse truck capacity limit reached: ${fromWarehouse.truckCapacity}',
+        Colors.orange,
+      );
+      return;
+    }
+
+    // Para kontrolü - transport ücreti
+    final transportFee = _fee.round();
+    if (transportFee > 0) {
+      if (!_engine.canAfford(transportFee)) {
+        _showSnack(
+          'Not enough money for transport fee: ¥$transportFee',
+          Colors.red,
+        );
+        return;
+      }
+
+      // Parayı düş
+      final success = _engine.deductMoney(transportFee);
+      if (!success) {
+        _showSnack('Failed to deduct transport fee', Colors.red);
+        return;
+      }
+    }
+
+    // Sevkiyatı başlat
     _engine.requestShipment(
       fromWarehouseId: fromWarehouseId,
       destinationCity: _selectedCity!,
@@ -206,7 +250,11 @@ class _TransportScreenState extends State<TransportScreen> {
     // Truck'a rota ata — engine bir tick sonra sevkiyatı işler ve truck'u idle'a döndürür.
     _engine.assignTruckRoute(selectedId, routeId);
 
-    _showSnack('🚚 ${_truck?.name ?? "Truck"} en route!', Colors.green);
+    _showSnack(
+      '🚚 ${_truck?.name ?? "Truck"} en route! '
+      'Carrying: $_limitedAmount ${_resourceType.name} | Fee: ¥$transportFee',
+      Colors.green,
+    );
 
     // Bir süre sonra geri dön
     Future.delayed(const Duration(seconds: 2), () {
@@ -224,8 +272,6 @@ class _TransportScreenState extends State<TransportScreen> {
       ),
     );
   }
-
-
 
   Color _statusColor(TruckStatus status) {
     switch (status) {
@@ -251,7 +297,7 @@ class _TransportScreenState extends State<TransportScreen> {
     return Scaffold(
       backgroundColor: Colors.grey[100],
       appBar: AppBar(
-        title: Text(truck != null ? '🚚 ${truck.name}' : 'Transport'),
+        title: Text("Transportation"),
         backgroundColor: Colors.teal[700],
         foregroundColor: Colors.white,
       ),
@@ -262,14 +308,18 @@ class _TransportScreenState extends State<TransportScreen> {
                 const SizedBox(height: 24),
                 Center(
                   child: Text(
-                    _trucks.isEmpty ? 'No trucks purchased yet' : 'Truck not found',
-                    style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                    _trucks.isEmpty
+                        ? 'No trucks purchased yet'
+                        : 'Truck not found',
+                    style: const TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold,
+                    ),
                   ),
                 ),
               ],
             )
           : ListView(
-
               padding: const EdgeInsets.all(16),
               children: [
                 // ===== TRUCK ÖZET =====
@@ -277,8 +327,7 @@ class _TransportScreenState extends State<TransportScreen> {
                   elevation: 3,
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(14),
-                    side: BorderSide(
-                        color: Colors.teal.withValues(alpha: 0.5)),
+                    side: BorderSide(color: Colors.teal.withValues(alpha: 0.5)),
                   ),
                   child: Padding(
                     padding: const EdgeInsets.all(16),
@@ -291,37 +340,49 @@ class _TransportScreenState extends State<TransportScreen> {
                             color: Colors.teal.withValues(alpha: 0.1),
                             borderRadius: BorderRadius.circular(12),
                           ),
-                          child: const Icon(Icons.local_shipping,
-                              color: Colors.teal, size: 28),
+                          child: const Icon(
+                            Icons.local_shipping,
+                            color: Colors.teal,
+                            size: 28,
+                          ),
                         ),
                         const SizedBox(width: 12),
                         Expanded(
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              Text(truck.name,
-                                  style: const TextStyle(
-                                      fontSize: 16,
-                                      fontWeight: FontWeight.bold)),
                               Text(
-                                  'Lv.${truck.level} | Cap:${truck.effectiveCapacity} | ${truck.status.name}',
-                                  style: TextStyle(
-                                      fontSize: 12,
-                                      color: Colors.grey[600])),
+                                truck.name,
+                                style: const TextStyle(
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                              Text(
+                                'Lv.${truck.level} | Cap:${truck.effectiveCapacity} | ${truck.status.name}',
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  color: Colors.grey[600],
+                                ),
+                              ),
                             ],
                           ),
                         ),
                         // Status badge
                         Container(
                           padding: const EdgeInsets.symmetric(
-                              horizontal: 10, vertical: 4),
+                            horizontal: 10,
+                            vertical: 4,
+                          ),
                           decoration: BoxDecoration(
-                            color: _statusColor(truck.status)
-                                .withValues(alpha: 0.15),
+                            color: _statusColor(
+                              truck.status,
+                            ).withValues(alpha: 0.15),
                             borderRadius: BorderRadius.circular(20),
                             border: Border.all(
-                              color: _statusColor(truck.status)
-                                  .withValues(alpha: 0.4),
+                              color: _statusColor(
+                                truck.status,
+                              ).withValues(alpha: 0.4),
                             ),
                           ),
                           child: Text(
@@ -344,7 +405,8 @@ class _TransportScreenState extends State<TransportScreen> {
                 Card(
                   elevation: 2,
                   shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(14)),
+                    borderRadius: BorderRadius.circular(14),
+                  ),
                   child: Padding(
                     padding: const EdgeInsets.all(16),
                     child: Column(
@@ -352,13 +414,19 @@ class _TransportScreenState extends State<TransportScreen> {
                       children: [
                         Row(
                           children: [
-                            Icon(Icons.local_shipping,
-                                size: 20, color: Colors.teal[700]),
+                            Icon(
+                              Icons.local_shipping,
+                              size: 20,
+                              color: Colors.teal[700],
+                            ),
                             const SizedBox(width: 8),
-                            const Text('Select Truck',
-                                style: TextStyle(
-                                    fontSize: 16,
-                                    fontWeight: FontWeight.bold)),
+                            const Text(
+                              'Select Truck',
+                              style: TextStyle(
+                                fontSize: 16,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
                           ],
                         ),
                         const SizedBox(height: 16),
@@ -370,12 +438,15 @@ class _TransportScreenState extends State<TransportScreen> {
                             border: OutlineInputBorder(),
                           ),
                           items: _trucks
-                              .map((t) => DropdownMenuItem<String>(
-                                    value: t.id,
-                                    child: Text('${t.name} (Lv.${t.level})'),
-                                  ))
+                              .map(
+                                (t) => DropdownMenuItem<String>(
+                                  value: t.id,
+                                  child: Text('${t.name} (Lv.${t.level})'),
+                                ),
+                              )
                               .toList(),
-                          onChanged: (v) => setState(() => _selectedTruckId = v),
+                          onChanged: (v) =>
+                              setState(() => _selectedTruckId = v),
                         ),
                       ],
                     ),
@@ -386,10 +457,10 @@ class _TransportScreenState extends State<TransportScreen> {
 
                 // ===== SEVKİYAT AYARLARI =====
                 Card(
-
                   elevation: 2,
                   shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(14)),
+                    borderRadius: BorderRadius.circular(14),
+                  ),
                   child: Padding(
                     padding: const EdgeInsets.all(16),
                     child: Column(
@@ -397,13 +468,19 @@ class _TransportScreenState extends State<TransportScreen> {
                       children: [
                         Row(
                           children: [
-                            Icon(Icons.settings,
-                                size: 20, color: Colors.teal[700]),
+                            Icon(
+                              Icons.settings,
+                              size: 20,
+                              color: Colors.teal[700],
+                            ),
                             const SizedBox(width: 8),
-                            const Text('Transport Settings',
-                                style: TextStyle(
-                                    fontSize: 16,
-                                    fontWeight: FontWeight.bold)),
+                            const Text(
+                              'Transport Settings',
+                              style: TextStyle(
+                                fontSize: 16,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
                           ],
                         ),
                         const SizedBox(height: 16),
@@ -418,8 +495,12 @@ class _TransportScreenState extends State<TransportScreen> {
                             border: OutlineInputBorder(),
                           ),
                           items: _warehouses
-                              .map((w) => DropdownMenuItem(
-                                  value: w.id, child: Text(w.name)))
+                              .map(
+                                (w) => DropdownMenuItem(
+                                  value: w.id,
+                                  child: Text(w.name),
+                                ),
+                              )
                               .toList(),
                           onChanged: (v) {
                             setState(() {
@@ -436,10 +517,12 @@ class _TransportScreenState extends State<TransportScreen> {
                             border: OutlineInputBorder(),
                           ),
                           items: CityList.values
-                              .map((c) => DropdownMenuItem(
-                                    value: c,
-                                    child: Text(c.toString().split('.').last),
-                                  ))
+                              .map(
+                                (c) => DropdownMenuItem(
+                                  value: c,
+                                  child: Text(c.toString().split('.').last),
+                                ),
+                              )
                               .toList(),
                           onChanged: (v) {
                             setState(() => _selectedCity = v);
@@ -456,28 +539,33 @@ class _TransportScreenState extends State<TransportScreen> {
                             border: OutlineInputBorder(),
                           ),
                           items: ResourceType.values
-                              .map((r) => DropdownMenuItem(
-                                  value: r, child: Text(r.name)))
+                              .map(
+                                (r) => DropdownMenuItem(
+                                  value: r,
+                                  child: Text(r.name),
+                                ),
+                              )
                               .toList(),
                           onChanged: (v) => setState(
-                              () => _resourceType = v ?? ResourceType.wood),
+                            () => _resourceType = v ?? ResourceType.wood,
+                          ),
                         ),
                         const SizedBox(height: 16),
 
                         // Amount
                         Row(
                           children: [
-                            const Text('Amount:',
-                                style: TextStyle(
-                                    fontWeight: FontWeight.w600)),
+                            const Text(
+                              'Amount:',
+                              style: TextStyle(fontWeight: FontWeight.w600),
+                            ),
                             const SizedBox(width: 8),
                             Expanded(
                               child: Slider(
                                 value: _limitedAmount.toDouble(),
                                 min: 1,
                                 max: _truckCapacity.toDouble(),
-                                divisions:
-                                    (_truckCapacity - 1).clamp(1, 999),
+                                divisions: (_truckCapacity - 1).clamp(1, 999),
                                 onChanged: (v) =>
                                     setState(() => _amount = v.round()),
                               ),
@@ -498,7 +586,9 @@ class _TransportScreenState extends State<TransportScreen> {
                         Text(
                           'Capacity: $_truckCapacity | Fee: ¥${_fee.toStringAsFixed(0)}',
                           style: TextStyle(
-                              fontSize: 12, color: Colors.grey[600]),
+                            fontSize: 12,
+                            color: Colors.grey[600],
+                          ),
                         ),
                       ],
                     ),
@@ -514,9 +604,13 @@ class _TransportScreenState extends State<TransportScreen> {
                   child: ElevatedButton.icon(
                     onPressed: _hasTruckDepot ? _startTransport : null,
                     icon: const Icon(Icons.play_arrow, size: 28),
-                    label: const Text('START TRANSPORT',
-                        style: TextStyle(
-                            fontSize: 18, fontWeight: FontWeight.bold)),
+                    label: const Text(
+                      'START TRANSPORT',
+                      style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
                     style: ElevatedButton.styleFrom(
                       backgroundColor: Colors.teal,
                       foregroundColor: Colors.white,
@@ -534,8 +628,7 @@ class _TransportScreenState extends State<TransportScreen> {
                     child: Text(
                       '⚠️ Truck Depot required - buy from Building Shop',
                       textAlign: TextAlign.center,
-                      style: TextStyle(
-                          fontSize: 12, color: Colors.red[400]),
+                      style: TextStyle(fontSize: 12, color: Colors.red[400]),
                     ),
                   ),
               ],
