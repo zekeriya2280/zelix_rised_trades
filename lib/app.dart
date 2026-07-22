@@ -1,6 +1,11 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
+import 'package:zelix_rised_trades/core/game_initializer.dart';
+import 'package:zelix_rised_trades/repositories/firebase_repository.dart';
+import 'package:zelix_rised_trades/services/game_service.dart';
+import 'package:zelix_rised_trades/ui/providers/game_provider.dart';
 
-import 'ui/screens/home_screen.dart';
+import 'ui/screens/game_screen.dart';
 
 class ZelixApp extends StatelessWidget {
   const ZelixApp({super.key});
@@ -25,7 +30,16 @@ class ZelixApp extends StatelessWidget {
         brightness: Brightness.dark,
       ),
 
-      home: const HomeScreen(),
+      home: GameScreen(
+        provider: GameProvider(
+          gameService: GameService(
+            initializer: GameInitializer(),
+            firebaseRepository: FirebaseRepository(
+              firestore: FirebaseFirestore.instance,
+            ),
+          ),
+        ),
+      ),
     );
   }
 }

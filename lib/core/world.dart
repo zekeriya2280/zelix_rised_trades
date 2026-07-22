@@ -1,56 +1,81 @@
-/// File : lib/core/world.dart
-/// Version : 1.2.0
-/// Status : Stable
+import '../models/product.dart';
+import '../models/factory.dart';
+import '../models/warehouse.dart';
+import '../models/truck.dart';
 
 class World {
-  //========================
-  // Time
-  //========================
+  final String playerId;
 
-  DateTime gameTime = DateTime(2026, 1, 1, 8);
+  String playerName;
 
-  double gameSpeed = 1.0;
+  int money;
 
-  bool paused = false;
+  int level;
 
-  //========================
-  // Economy
-  //========================
+  double inflation;
 
-  int money = 100000;
+  DateTime lastTick;
 
-  //========================
-  // Entities
-  //========================
+  int serverVersion;
 
-  final Map<String, dynamic> players = {};
+  Map<String, Product> products;
 
-  final Map<String, dynamic> cities = {};
+  Map<String, Factory> factories;
 
-  final Map<String, dynamic> factories = {};
+  Map<String, Warehouse> warehouses;
 
-  final Map<String, dynamic> warehouses = {};
+  Map<String, Truck> trucks;
 
-  final Map<String, dynamic> trucks = {};
+  Map<String, dynamic> cities;
 
-  //========================
-  // Time
-  //========================
+  Map<String, double> market;
 
-  void advanceTime(Duration delta) {
-    if (paused) return;
+  World({
+    required this.playerId,
 
-    gameTime = gameTime.add(
-      Duration(microseconds: (delta.inMicroseconds * gameSpeed).round()),
-    );
-  }
+    required this.playerName,
 
-  //========================
-  // Economy
-  //========================
+    required this.money,
 
-  void addMoney(int amount) {
-    money += amount;
+    this.level = 1,
+
+    this.inflation = 0,
+
+    DateTime? lastTick,
+
+    this.serverVersion = 1,
+
+    Map<String, Product>? products,
+
+    Map<String, Factory>? factories,
+
+    Map<String, Warehouse>? warehouses,
+
+    Map<String, Truck>? trucks,
+
+    Map<String, dynamic>? cities,
+
+    Map<String, double>? market,
+  }) : lastTick = lastTick ?? DateTime.now(),
+
+       products = products ?? {},
+
+       factories = factories ?? {},
+
+       warehouses = warehouses ?? {},
+
+       trucks = trucks ?? {},
+
+       cities = cities ?? {},
+
+       market = market ?? {};
+
+  // =========================
+  // TICK UPDATE
+  // =========================
+
+  void updateTick() {
+    lastTick = DateTime.now();
   }
 
   bool spendMoney(int amount) {
@@ -63,72 +88,81 @@ class World {
     return true;
   }
 
-  //========================
-  // Game
-  //========================
-
-  void pause() {
-    paused = true;
+  void addMoney(int amount) {
+    money += amount;
   }
 
-  void resume() {
-    paused = false;
-  }
-
-  void setGameSpeed(double speed) {
-    if (speed <= 0) return;
-
-    gameSpeed = speed;
-  }
-
-  //========================
-  // Save
-  //========================
+  // =========================
+  // JSON
+  // =========================
 
   Map<String, dynamic> toJson() {
     return {
-      'gameTime': gameTime.toIso8601String(),
-      'gameSpeed': gameSpeed,
-      'paused': paused,
-      'money': money,
+      "playerId": playerId,
 
-      // Şimdilik boş.
-      // Model sınıfları yazıldığında doldurulacak.
-      'players': players,
-      'cities': cities,
-      'factories': factories,
-      'warehouses': warehouses,
-      'trucks': trucks,
+      "playerName": playerName,
+
+      "money": money,
+
+      "level": level,
+
+      "inflation": inflation,
+
+      "lastTick": lastTick.toIso8601String(),
+
+      "serverVersion": serverVersion,
+
+      "products": products.map((key, value) => MapEntry(key, value.toJson())),
+
+      "factories": factories.map((key, value) => MapEntry(key, value.toJson())),
+
+      "warehouses": warehouses.map(
+        (key, value) => MapEntry(key, value.toJson()),
+      ),
+
+      "trucks": trucks.map((key, value) => MapEntry(key, value.toJson())),
+
+      "cities": cities,
+
+      "market": market,
     };
   }
 
-  void loadFromJson(Map<String, dynamic> json) {
-    gameTime = DateTime.parse(json['gameTime']);
+  factory World.fromJson(Map<String, dynamic> json) {
+    return World(
+      playerId: json["playerId"],
 
-    gameSpeed = (json['gameSpeed'] as num).toDouble();
+      playerName: json["playerName"] ?? "Player",
 
-    paused = json['paused'];
+      money: json["money"] ?? 0,
 
-    money = json['money'];
+      level: json["level"] ?? 1,
 
-    players
-      ..clear()
-      ..addAll(json['players']);
+      inflation: (json["inflation"] ?? 0).toDouble(),
 
-    cities
-      ..clear()
-      ..addAll(json['cities']);
+      lastTick: DateTime.parse(json["lastTick"]),
 
-    factories
-      ..clear()
-      ..addAll(json['factories']);
+      serverVersion: json["serverVersion"] ?? 1,
 
-    warehouses
-      ..clear()
-      ..addAll(json['warehouses']);
+      products: (json["products"] ?? {}).map<String, Product>(
+        (key, value) => MapEntry(key, Product.fromJson(value)),
+      ),
 
-    trucks
-      ..clear()
-      ..addAll(json['trucks']);
+      factories: (json["factories"] ?? {}).map<String, Factory>(
+        (key, value) => MapEntry(key, Factory.fromJson(value)),
+      ),
+
+      warehouses: (json["warehouses"] ?? {}).map<String, Warehouse>(
+        (key, value) => MapEntry(key, Warehouse.fromJson(value)),
+      ),
+
+      trucks: (json["trucks"] ?? {}).map<String, Truck>(
+        (key, value) => MapEntry(key, Truck.fromJson(value)),
+      ),
+
+      cities: json["cities"] ?? {},
+
+      market: Map<String, double>.from(json["market"] ?? {}),
+    );
   }
 }
