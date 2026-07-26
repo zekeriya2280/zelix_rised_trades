@@ -1,4 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:zelix_rised_trades/ui/screens/auth/auth_gate.dart';
+import 'package:zelix_rised_trades/ui/screens/auth/register_screen.dart';
+import 'package:zelix_rised_trades/ui/screens/menu/main_menu_screen.dart';
 import 'package:zelix_rised_trades/ui/screens/splash/splash_screen.dart';
 
 class ZelixApp extends StatelessWidget {
@@ -24,7 +27,12 @@ class ZelixApp extends StatelessWidget {
         brightness: Brightness.dark,
       ),
 
-      home: SplashScreen(),
+      home: const SplashScreen(),
+      routes: {
+        '/auth': (_) => const AuthGate(),
+        '/menu': (_) => const MainMenuScreen(),
+        '/register': (_) => const RegisterScreen(),
+      },
     );
   }
 }

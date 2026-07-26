@@ -1,7 +1,29 @@
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
+import 'package:zelix_rised_trades/ui/screens/auth/auth_gate.dart';
 
-class MainMenuScreen extends StatelessWidget {
+class MainMenuScreen extends StatefulWidget {
   const MainMenuScreen({super.key});
+
+  @override
+  State<MainMenuScreen> createState() => _MainMenuScreenState();
+}
+
+class _MainMenuScreenState extends State<MainMenuScreen> {
+  Future<void> logout() async {
+    try {
+      await FirebaseAuth.instance.signOut();
+      if (mounted) {
+        Navigator.pushAndRemoveUntil(
+          context,
+          MaterialPageRoute(builder: (_) => const AuthGate()),
+          (_) => false,
+        );
+      }
+    } catch (e) {
+      debugPrint(e.toString());
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -68,7 +90,7 @@ class MainMenuScreen extends StatelessWidget {
 
                     const SizedBox(height: 15),
 
-                    menuButton(context, Icons.logout, "Logout", () {}),
+                    menuButton(context, Icons.logout, "Logout", logout),
 
                     const Spacer(),
 

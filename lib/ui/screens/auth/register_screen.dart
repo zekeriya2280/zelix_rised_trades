@@ -1,4 +1,6 @@
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
+import 'package:zelix_rised_trades/ui/screens/auth/player_setup_screen.dart';
 
 class RegisterScreen extends StatefulWidget {
   const RegisterScreen({super.key});
@@ -12,6 +14,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
   final emailController = TextEditingController();
   final passwordController = TextEditingController();
   final confirmController = TextEditingController();
+  final _auth = FirebaseAuth.instance;
 
   bool hidePassword = true;
   bool hideConfirm = true;
@@ -39,12 +42,17 @@ class _RegisterScreenState extends State<RegisterScreen> {
     });
 
     try {
-      // FirebaseAuth.createUserWithEmailAndPassword()
-
-      // Firestore'a nickname kaydedilecek.
-
       if (mounted) {
-        Navigator.pop(context);
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(
+            builder: (context) => PlayerSetupScreen(
+              emailController: emailController,
+              passwordController: passwordController,
+              nicknameController: nicknameController,
+            ),
+          ),
+        );
       }
     } catch (e) {
       showMessage(e.toString());
@@ -88,7 +96,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                 padding: const EdgeInsets.all(28),
 
                 decoration: BoxDecoration(
-                  color: Colors.white.withOpacity(.08),
+                  color: Colors.white.withValues(alpha: .08),
 
                   borderRadius: BorderRadius.circular(24),
 
@@ -97,12 +105,23 @@ class _RegisterScreenState extends State<RegisterScreen> {
 
                 child: Column(
                   children: [
-                    const Icon(
-                      Icons.account_circle,
+                    Container(
+                      child: const Icon(
+                        Icons.account_circle,
 
-                      color: Colors.orange,
+                        color: Colors.orange,
 
-                      size: 80,
+                        size: 80,
+                      ),
+                      decoration: BoxDecoration(
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.orange.withValues(alpha: 0.4),
+                            blurRadius: 54,
+                            spreadRadius: 4,
+                          ),
+                        ],
+                      ),
                     ),
 
                     const SizedBox(height: 16),
@@ -222,13 +241,27 @@ class _RegisterScreenState extends State<RegisterScreen> {
                             ? const CircularProgressIndicator(
                                 color: Colors.white,
                               )
-                            : const Text(
-                                "CREATE ACCOUNT",
+                            : Container(
+                                decoration: BoxDecoration(
+                                  boxShadow: [
+                                    BoxShadow(
+                                      offset: const Offset(0, 0),
+                                      color: Colors.orange.withValues(
+                                        alpha: 0.7,
+                                      ),
+                                      blurRadius: 50,
+                                      spreadRadius: 4,
+                                    ),
+                                  ],
+                                ),
+                                child: const Text(
+                                  "CREATE ACCOUNT",
 
-                                style: TextStyle(
-                                  fontWeight: FontWeight.bold,
+                                  style: TextStyle(
+                                    fontWeight: FontWeight.bold,
 
-                                  fontSize: 18,
+                                    fontSize: 18,
+                                  ),
                                 ),
                               ),
                       ),
