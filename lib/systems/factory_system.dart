@@ -1,6 +1,5 @@
 import '../core/world.dart';
 import '../models/factory.dart';
-import '../models/warehouse.dart';
 
 class FactorySystem {
   final Map<String, Factory> catalog = {

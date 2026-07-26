@@ -1,21 +1,19 @@
 import 'package:flutter/material.dart';
-
-import '../providers/game_provider.dart';
-
-import 'city_screen.dart';
-import 'market_screen.dart';
+import 'package:zelix_rised_trades/ui/providers/game_provider.dart';
+import 'package:zelix_rised_trades/ui/screens/city_screen.dart';
+import 'package:zelix_rised_trades/ui/screens/market_screen.dart';
 
 class GameScreen extends StatelessWidget {
-  final GameProvider provider;
-
   const GameScreen({super.key, required this.provider});
+
+  final GameProvider provider;
 
   @override
   Widget build(BuildContext context) {
     final world = provider.world;
 
     if (world == null) {
-      print("haittaaaaaaaaaaaaa");
+      debugPrint("World is null, showing loading");
       return const Scaffold(body: Center(child: CircularProgressIndicator()));
     }
 
@@ -42,45 +40,7 @@ class GameScreen extends StatelessWidget {
 
             const SizedBox(height: 10),
 
-            // LEVEL
-            Card(
-              child: ListTile(
-                leading: const Icon(Icons.star),
-
-                title: const Text("Level"),
-
-                subtitle: Text("${world.level}"),
-              ),
-            ),
-
-            const SizedBox(height: 10),
-
-            // WAREHOUSE
-            Card(
-              child: ListTile(
-                leading: const Icon(Icons.inventory),
-
-                title: const Text("Warehouses"),
-
-                subtitle: Text("${world.warehouses.length}"),
-              ),
-            ),
-
-            const SizedBox(height: 10),
-
-            // FACTORIES
-            Card(
-              child: ListTile(
-                leading: const Icon(Icons.factory),
-
-                title: const Text("Factories"),
-
-                subtitle: Text("${world.factories.length}"),
-              ),
-            ),
-
-            const Spacer(),
-
+            // CITY & MARKET BUTTONS
             Row(
               children: [
                 Expanded(
@@ -90,7 +50,6 @@ class GameScreen extends StatelessWidget {
                     onPressed: () {
                       Navigator.push(
                         context,
-
                         MaterialPageRoute(
                           builder: (_) => CityScreen(provider: provider),
                         ),
@@ -108,7 +67,6 @@ class GameScreen extends StatelessWidget {
                     onPressed: () {
                       Navigator.push(
                         context,
-
                         MaterialPageRoute(
                           builder: (_) => MarketScreen(provider: provider),
                         ),

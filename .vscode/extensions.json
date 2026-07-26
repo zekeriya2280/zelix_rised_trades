@@ -1,0 +1,42 @@
+{
+  "recommendations": [
+    // ==================== FLUTTER & DART ====================
+    "dart-code.dart-code", // Dart language support
+    "dart-code.flutter", // Flutter support
+    // ==================== AI CODE COMPLETION (YAZMADAN ÖNEREN) ====================
+    "github.copilot", // GitHub Copilot - En güçlü AI kod tamamlama (Ücretli)
+    "github.copilot-chat", // GitHub Copilot Chat - AI ile sohbet
+    "tabnine.tabnine-vscode", // Tabnine - AI kod tamamlama (Ücretsiz/Premium)
+    "amazonwebservices.aws-toolkit-vscode", // Amazon CodeWhisperer - Ücretsiz AI kod tamamlama
+    "visualstudioexptteam.vscodeintellicode", // IntelliCode - Microsoft AI IntelliSense
+    "visualstudioexptteam.intellicode-api-usage-examples", // IntelliCode API örnekleri
+    // ==================== CODE COMPLETION & SNIPPETS ====================
+    "jeroen-meijer.pubspec-assist", // Pubspec.yaml helper
+    "alexisvt.flutter-snippets", // Flutter snippets
+    "nash.awesome-flutter-snippets", // More Flutter snippets
+    "naumovs.color-highlight", // Color preview
+    "felixangelov.bloc", // Bloc snippets
+    // ==================== CODE QUALITY ====================
+    "usernamehw.errorlens", // Inline error highlighting
+    "oderwat.indent-rainbow", // Indent visualization
+    "streetsidesoftware.code-spell-checker", // Spell checker
+    // ==================== DEBUGGING ====================
+    "msjsdiag.debugger-for-chrome", // Chrome debugging
+    // ==================== PRODUCTIVITY ====================
+    "aaron-bond.better-comments", // Better comment highlighting
+    "pkief.material-icon-theme", // Material icon theme
+    "christian-kohler.path-intellisense", // Path auto-complete
+    "formulahendry.auto-rename-tag", // Auto rename paired tags
+    "formulahendry.auto-close-tag", // Auto close tags
+    // ==================== GIT ====================
+    "eamodio.gitlens", // Git supercharged
+    "donjayamanne.githistory", // Git History
+    // ==================== FORMATTING ====================
+    "esbenp.prettier-vscode", // Prettier formatter
+    // ==================== TESTING ====================
+    "kavod-io.vscode-jest-runner", // Test runner
+    // ==================== THEME & UI ====================
+    "zhuangtongfa.material-theme", // Material Theme
+    "vscode-icons-team.vscode-icons" // VSCode Icons
+  ]
+}

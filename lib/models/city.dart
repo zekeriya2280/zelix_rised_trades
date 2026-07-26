@@ -1,6 +1,7 @@
 /// File : lib/models/city.dart
 /// Version : 1.0.0
 /// Status : Stable
+library;
 
 /// Şehir veri modeli.
 ///

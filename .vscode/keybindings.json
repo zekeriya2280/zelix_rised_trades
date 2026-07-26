@@ -1,0 +1,70 @@
+[
+  // ==================== FLUTTER SPECIFIC ====================
+  {
+    "key": "ctrl+shift+r",
+    "command": "dart.hotReload",
+    "when": "dart-code:anyProjectLoaded"
+  },
+  {
+    "key": "ctrl+shift+f5",
+    "command": "dart.hotRestart",
+    "when": "dart-code:anyProjectLoaded"
+  },
+  {
+    "key": "ctrl+alt+w",
+    "command": "dart.wrapWithWidget",
+    "when": "editorTextFocus && dart-code:anyProjectLoaded"
+  },
+  {
+    "key": "ctrl+alt+c",
+    "command": "dart.wrapWithCenter",
+    "when": "editorTextFocus && dart-code:anyProjectLoaded"
+  },
+  {
+    "key": "ctrl+alt+p",
+    "command": "dart.wrapWithPadding",
+    "when": "editorTextFocus && dart-code:anyProjectLoaded"
+  },
+  {
+    "key": "ctrl+alt+r",
+    "command": "dart.wrapWithRow",
+    "when": "editorTextFocus && dart-code:anyProjectLoaded"
+  },
+  {
+    "key": "ctrl+alt+l",
+    "command": "dart.wrapWithColumn",
+    "when": "editorTextFocus && dart-code:anyProjectLoaded"
+  },
+  {
+    "key": "ctrl+alt+s",
+    "command": "dart.wrapWithStreamBuilder",
+    "when": "editorTextFocus && dart-code:anyProjectLoaded"
+  },
+  {
+    "key": "ctrl+shift+delete",
+    "command": "dart.removeWidget",
+    "when": "editorTextFocus && dart-code:anyProjectLoaded"
+  },
+  
+  // ==================== GENERAL PRODUCTIVITY ====================
+  {
+    "key": "ctrl+shift+o",
+    "command": "dart.organizeImports",
+    "when": "editorTextFocus && dart-code:anyProjectLoaded"
+  },
+  {
+    "key": "ctrl+.",
+    "command": "editor.action.quickFix",
+    "when": "editorTextFocus"
+  },
+  {
+    "key": "f2",
+    "command": "editor.action.rename",
+    "when": "editorTextFocus"
+  },
+  {
+    "key": "ctrl+space",
+    "command": "editor.action.triggerSuggest",
+    "when": "editorTextFocus"
+  }
+]

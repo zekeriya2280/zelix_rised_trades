@@ -1,5 +1,5 @@
+import 'package:flutter/foundation.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-
 import '../core/world.dart';
 
 class FirebaseRepository {
@@ -30,17 +30,17 @@ class FirebaseRepository {
           .doc(playerId)
           .get();
 
-      print("Firebase loaded");
+      debugPrint("Firebase loaded");
 
       if (!snapshot.exists) {
-        print("No save");
+        debugPrint("No save");
 
         return null;
       }
 
       return World.fromJson(snapshot.data()!);
     } catch (e) {
-      print("Firebase error: $e");
+      debugPrint("Firebase error: $e");
 
       return null;
     }

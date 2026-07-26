@@ -1,0 +1,453 @@
+{
+  // ==================== WIDGET SNIPPETS ====================
+  
+  "Stateless Widget": {
+    "prefix": "stl",
+    "body": [
+      "class ${1:WidgetName} extends StatelessWidget {",
+      "  const ${1:WidgetName}({super.key});",
+      "",
+      "  @override",
+      "  Widget build(BuildContext context) {",
+      "    return ${2:Container}(",
+      "      ${3}",
+      "    );",
+      "  }",
+      "}"
+    ],
+    "description": "Creates a Stateless Widget"
+  },
+
+  "Stateful Widget": {
+    "prefix": "stf",
+    "body": [
+      "class ${1:WidgetName} extends StatefulWidget {",
+      "  const ${1:WidgetName}({super.key});",
+      "",
+      "  @override",
+      "  State<${1:WidgetName}> createState() => _${1:WidgetName}State();",
+      "}",
+      "",
+      "class _${1:WidgetName}State extends State<${1:WidgetName}> {",
+      "  @override",
+      "  Widget build(BuildContext context) {",
+      "    return ${2:Container}(",
+      "      ${3}",
+      "    );",
+      "  }",
+      "}"
+    ],
+    "description": "Creates a Stateful Widget"
+  },
+
+  "Build Method": {
+    "prefix": "build",
+    "body": [
+      "@override",
+      "Widget build(BuildContext context) {",
+      "  return ${1:Container}(",
+      "    ${2}",
+      "  );",
+      "}"
+    ],
+    "description": "Creates a build method"
+  },
+
+  // ==================== LAYOUT WIDGETS ====================
+
+  "Scaffold": {
+    "prefix": "scaffold",
+    "body": [
+      "Scaffold(",
+      "  appBar: AppBar(",
+      "    title: const Text('${1:Title}'),",
+      "  ),",
+      "  body: ${2:Container}(),",
+      ")"
+    ],
+    "description": "Creates a Scaffold"
+  },
+
+  "Container": {
+    "prefix": "cont",
+    "body": [
+      "Container(",
+      "  ${1:child: ${2}}",
+      ")"
+    ],
+    "description": "Creates a Container"
+  },
+
+  "Padding": {
+    "prefix": "pad",
+    "body": [
+      "Padding(",
+      "  padding: const EdgeInsets.all(${1:8.0}),",
+      "  child: ${2}",
+      ")"
+    ],
+    "description": "Creates a Padding"
+  },
+
+  "Center": {
+    "prefix": "center",
+    "body": [
+      "Center(",
+      "  child: ${1}",
+      ")"
+    ],
+    "description": "Creates a Center widget"
+  },
+
+  "Column": {
+    "prefix": "col",
+    "body": [
+      "Column(",
+      "  children: [",
+      "    ${1}",
+      "  ],",
+      ")"
+    ],
+    "description": "Creates a Column"
+  },
+
+  "Row": {
+    "prefix": "row",
+    "body": [
+      "Row(",
+      "  children: [",
+      "    ${1}",
+      "  ],",
+      ")"
+    ],
+    "description": "Creates a Row"
+  },
+
+  "ListView Builder": {
+    "prefix": "lvb",
+    "body": [
+      "ListView.builder(",
+      "  itemCount: ${1:items.length},",
+      "  itemBuilder: (context, index) {",
+      "    return ${2:ListTile}(",
+      "      ${3}",
+      "    );",
+      "  },",
+      ")"
+    ],
+    "description": "Creates a ListView.builder"
+  },
+
+  "GridView Builder": {
+    "prefix": "gvb",
+    "body": [
+      "GridView.builder(",
+      "  gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(",
+      "    crossAxisCount: ${1:2},",
+      "  ),",
+      "  itemCount: ${2:items.length},",
+      "  itemBuilder: (context, index) {",
+      "    return ${3:Container}();",
+      "  },",
+      ")"
+    ],
+    "description": "Creates a GridView.builder"
+  },
+
+  // ==================== MATERIAL WIDGETS ====================
+
+  "Card": {
+    "prefix": "card",
+    "body": [
+      "Card(",
+      "  child: ${1:ListTile}(",
+      "    ${2}",
+      "  ),",
+      ")"
+    ],
+    "description": "Creates a Card"
+  },
+
+  "ElevatedButton": {
+    "prefix": "elb",
+    "body": [
+      "ElevatedButton(",
+      "  onPressed: () {",
+      "    ${2}",
+      "  },",
+      "  child: const Text('${1:Button}'),",
+      ")"
+    ],
+    "description": "Creates an ElevatedButton"
+  },
+
+  "TextButton": {
+    "prefix": "txtb",
+    "body": [
+      "TextButton(",
+      "  onPressed: () {",
+      "    ${2}",
+      "  },",
+      "  child: const Text('${1:Button}'),",
+      ")"
+    ],
+    "description": "Creates a TextButton"
+  },
+
+  "IconButton": {
+    "prefix": "icb",
+    "body": [
+      "IconButton(",
+      "  icon: const Icon(Icons.${1:add}),",
+      "  onPressed: () {",
+      "    ${2}",
+      "  },",
+      ")"
+    ],
+    "description": "Creates an IconButton"
+  },
+
+  "TextField": {
+    "prefix": "tf",
+    "body": [
+      "TextField(",
+      "  decoration: const InputDecoration(",
+      "    labelText: '${1:Label}',",
+      "    hintText: '${2:Hint}',",
+      "  ),",
+      "  onChanged: (value) {",
+      "    ${3}",
+      "  },",
+      ")"
+    ],
+    "description": "Creates a TextField"
+  },
+
+  // ==================== NAVIGATION ====================
+
+  "Navigator Push": {
+    "prefix": "navpush",
+    "body": [
+      "Navigator.push(",
+      "  context,",
+      "  MaterialPageRoute(",
+      "    builder: (context) => ${1:Screen}(),",
+      "  ),",
+      ");"
+    ],
+    "description": "Navigate to a new screen"
+  },
+
+  "Navigator Pop": {
+    "prefix": "navpop",
+    "body": [
+      "Navigator.pop(context${1:, result});"
+    ],
+    "description": "Pop the current screen"
+  },
+
+  "Navigator PushReplacement": {
+    "prefix": "navreplace",
+    "body": [
+      "Navigator.pushReplacement(",
+      "  context,",
+      "  MaterialPageRoute(",
+      "    builder: (context) => ${1:Screen}(),",
+      "  ),",
+      ");"
+    ],
+    "description": "Replace current screen"
+  },
+
+  // ==================== STATE MANAGEMENT ====================
+
+  "setState": {
+    "prefix": "sets",
+    "body": [
+      "setState(() {",
+      "  ${1}",
+      "});"
+    ],
+    "description": "Calls setState"
+  },
+
+  "initState": {
+    "prefix": "inits",
+    "body": [
+      "@override",
+      "void initState() {",
+      "  super.initState();",
+      "  ${1}",
+      "}"
+    ],
+    "description": "Creates initState method"
+  },
+
+  "dispose": {
+    "prefix": "disp",
+    "body": [
+      "@override",
+      "void dispose() {",
+      "  ${1}",
+      "  super.dispose();",
+      "}"
+    ],
+    "description": "Creates dispose method"
+  },
+
+  // ==================== ASYNC ====================
+
+  "Future Method": {
+    "prefix": "futm",
+    "body": [
+      "Future<${1:void}> ${2:methodName}() async {",
+      "  ${3}",
+      "}"
+    ],
+    "description": "Creates an async method"
+  },
+
+  "FutureBuilder": {
+    "prefix": "futb",
+    "body": [
+      "FutureBuilder<${1:Type}>(",
+      "  future: ${2:futureMethod}(),",
+      "  builder: (context, snapshot) {",
+      "    if (snapshot.connectionState == ConnectionState.waiting) {",
+      "      return const CircularProgressIndicator();",
+      "    }",
+      "    if (snapshot.hasError) {",
+      "      return Text('Error: \\${snapshot.error}');",
+      "    }",
+      "    return ${3:Container}();",
+      "  },",
+      ")"
+    ],
+    "description": "Creates a FutureBuilder"
+  },
+
+  "StreamBuilder": {
+    "prefix": "strb",
+    "body": [
+      "StreamBuilder<${1:Type}>(",
+      "  stream: ${2:stream},",
+      "  builder: (context, snapshot) {",
+      "    if (snapshot.hasData) {",
+      "      return ${3:Container}();",
+      "    }",
+      "    return const CircularProgressIndicator();",
+      "  },",
+      ")"
+    ],
+    "description": "Creates a StreamBuilder"
+  },
+
+  // ==================== COMMON PATTERNS ====================
+
+  "ShowDialog": {
+    "prefix": "dialog",
+    "body": [
+      "showDialog(",
+      "  context: context,",
+      "  builder: (context) {",
+      "    return AlertDialog(",
+      "      title: const Text('${1:Title}'),",
+      "      content: const Text('${2:Content}'),",
+      "      actions: [",
+      "        TextButton(",
+      "          onPressed: () => Navigator.pop(context),",
+      "          child: const Text('Cancel'),",
+      "        ),",
+      "        TextButton(",
+      "          onPressed: () {",
+      "            ${3}",
+      "            Navigator.pop(context);",
+      "          },",
+      "          child: const Text('OK'),",
+      "        ),",
+      "      ],",
+      "    );",
+      "  },",
+      ");"
+    ],
+    "description": "Shows a dialog"
+  },
+
+  "SnackBar": {
+    "prefix": "snack",
+    "body": [
+      "ScaffoldMessenger.of(context).showSnackBar(",
+      "  SnackBar(",
+      "    content: Text('${1:Message}'),",
+      "    duration: const Duration(seconds: ${2:2}),",
+      "  ),",
+      ");"
+    ],
+    "description": "Shows a SnackBar"
+  },
+
+  "Material App": {
+    "prefix": "mapp",
+    "body": [
+      "MaterialApp(",
+      "  title: '${1:App Title}',",
+      "  theme: ThemeData(",
+      "    primarySwatch: Colors.${2:blue},",
+      "  ),",
+      "  home: ${3:HomeScreen}(),",
+      ")"
+    ],
+    "description": "Creates a MaterialApp"
+  },
+
+  // ==================== GAME-SPECIFIC PATTERNS ====================
+
+  "Game Provider": {
+    "prefix": "gprov",
+    "body": [
+      "class ${1:Name}Provider extends ChangeNotifier {",
+      "  ${2:// State variables}",
+      "",
+      "  ${3:// Methods}",
+      "",
+      "  void ${4:update}() {",
+      "    notifyListeners();",
+      "  }",
+      "}"
+    ],
+    "description": "Creates a game provider"
+  },
+
+  "Truck Card": {
+    "prefix": "tcard",
+    "body": [
+      "Card(",
+      "  margin: const EdgeInsets.only(bottom: 12),",
+      "  child: ListTile(",
+      "    leading: const Icon(Icons.local_shipping),",
+      "    title: Text('${1:Truck Name}'),",
+      "    subtitle: Text('Status: ${2:idle}'),",
+      "    trailing: IconButton(",
+      "      icon: const Icon(Icons.chevron_right),",
+      "      onPressed: () {",
+      "        ${3}",
+      "      },",
+      "    ),",
+      "  ),",
+      ")"
+    ],
+    "description": "Creates a truck card"
+  },
+
+  "Warehouse Item": {
+    "prefix": "witem",
+    "body": [
+      "ListTile(",
+      "  leading: const Icon(Icons.inventory),",
+      "  title: Text('${1:Resource}'),",
+      "  trailing: Text('${2:amount}'),",
+      ")"
+    ],
+    "description": "Creates a warehouse item"
+  }
+}

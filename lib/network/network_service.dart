@@ -16,11 +16,12 @@
 
 import 'dart:convert';
 
-import 'package:web_socket_channel/web_socket_channel.dart';
+// Web socket channel için placeholder
+// Pubspec.yaml'da web_socket_channel paketi eklendiğinde açılabilir
+// import 'package:web_socket_channel/web_socket_channel.dart';
 
 class NetworkService {
-  WebSocketChannel? _channel;
-
+  // TODO: web_socket_channel paketi eklendiğinde implement edilecek
   bool connected = false;
 
   // =========================
@@ -28,9 +29,11 @@ class NetworkService {
   // =========================
 
   Future<void> connect(String url) async {
-    _channel = WebSocketChannel.connect(Uri.parse(url));
-
+    // _channel = WebSocketChannel.connect(Uri.parse(url));
+    // connected = true;
+    // TODO: Firebase yerine gerçek server bağlantısı
     connected = true;
+    print('[NetworkService] Connected to $url');
   }
 
   // =========================
@@ -38,13 +41,8 @@ class NetworkService {
   // =========================
 
   Stream<Map<String, dynamic>> messages() {
-    if (_channel == null) {
-      return const Stream.empty();
-    }
-
-    return _channel!.stream.map((event) {
-      return jsonDecode(event);
-    });
+    // TODO: WebSocket implementasyonu eklendiğinde açılacak
+    return const Stream.empty();
   }
 
   // =========================
@@ -55,8 +53,8 @@ class NetworkService {
     if (!connected) {
       return;
     }
-
-    _channel!.sink.add(jsonEncode(data));
+    // TODO: _channel!.sink.add(jsonEncode(data));
+    print('[NetworkService] Sending: ${jsonEncode(data)}');
   }
 
   // =========================
@@ -64,10 +62,7 @@ class NetworkService {
   // =========================
 
   Future<void> disconnect() async {
-    await _channel!.sink.close();
-
+    // TODO: _channel!.sink.close();
     connected = false;
-
-    _channel = null;
   }
 }

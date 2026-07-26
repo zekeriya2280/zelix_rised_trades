@@ -1,56 +1,91 @@
 import 'package:flutter/material.dart';
-
-import '../providers/game_provider.dart';
+import 'package:zelix_rised_trades/ui/providers/game_provider.dart';
 
 class CityScreen extends StatelessWidget {
-  final GameProvider provider;
-
   const CityScreen({super.key, required this.provider});
+
+  final GameProvider provider;
 
   @override
   Widget build(BuildContext context) {
-    final world = provider.world;
-
-    if (world == null) {
-      return const Scaffold(body: Center(child: CircularProgressIndicator()));
-    }
-
-    final cities = world.cities;
-
     return Scaffold(
-      appBar: AppBar(title: const Text("Cities")),
+      backgroundColor: const Color(0xff07152B),
 
-      body: cities.isEmpty
-          ? const Center(child: Text("No cities available"))
-          : ListView.builder(
-              itemCount: cities.length,
+      appBar: AppBar(
+        title: const Text("Cities"),
+        backgroundColor: Colors.transparent,
+        elevation: 0,
+      ),
 
-              itemBuilder: (context, index) {
-                final city = cities.entries.elementAt(index);
+      floatingActionButton: FloatingActionButton.extended(
+        backgroundColor: Colors.orange,
+        icon: const Icon(Icons.add),
+        label: const Text("New City"),
+        onPressed: () {},
+      ),
 
-                return Card(
-                  margin: const EdgeInsets.all(8),
+      body: ListView(
+        padding: const EdgeInsets.all(16),
 
-                  child: ListTile(
-                    leading: const CircleAvatar(
-                      child: Icon(Icons.location_city),
-                    ),
+        children: [
+          // City Item 1
+          Card(
+            margin: const EdgeInsets.only(bottom: 16),
 
-                    title: Text(city.key),
+            child: ListTile(
+              leading: const Icon(
+                Icons.location_city,
+                size: 48,
+                color: Colors.blue,
+              ),
 
-                    subtitle: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
+              title: const Text("Tokyo", style: TextStyle(fontSize: 20)),
 
-                      children: [
-                        Text("Level: ${city.value["level"] ?? 1}"),
+              subtitle: const Text("Production: 50/hour"),
 
-                        Text("Population: ${city.value["population"] ?? 0}"),
-                      ],
-                    ),
-                  ),
-                );
-              },
+              trailing: const Icon(Icons.chevron_right, color: Colors.grey),
             ),
+          ),
+
+          // City Item 2
+          Card(
+            margin: const EdgeInsets.only(bottom: 16),
+
+            child: ListTile(
+              leading: const Icon(
+                Icons.location_city,
+                size: 48,
+                color: Colors.green,
+              ),
+
+              title: const Text("Osaka", style: TextStyle(fontSize: 20)),
+
+              subtitle: const Text("Production: 30/hour"),
+
+              trailing: const Icon(Icons.chevron_right, color: Colors.grey),
+            ),
+          ),
+
+          // City Item 3
+          Card(
+            margin: const EdgeInsets.only(bottom: 16),
+
+            child: ListTile(
+              leading: const Icon(
+                Icons.location_city,
+                size: 48,
+                color: Colors.red,
+              ),
+
+              title: const Text("Kyoto", style: TextStyle(fontSize: 20)),
+
+              subtitle: const Text("Production: 20/hour"),
+
+              trailing: const Icon(Icons.chevron_right, color: Colors.grey),
+            ),
+          ),
+        ],
+      ),
     );
   }
 }
