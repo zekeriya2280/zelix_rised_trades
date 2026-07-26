@@ -47,7 +47,23 @@ class _MainMenuScreenState extends State<MainMenuScreen> {
                   children: [
                     const SizedBox(height: 40),
 
-                    const Icon(Icons.public, color: Colors.orange, size: 90),
+                    Container(
+                      decoration: BoxDecoration(
+                        boxShadow: [
+                          BoxShadow(
+                            offset: const Offset(0, 0),
+                            color: Colors.orange.withValues(alpha: 0.7),
+                            blurRadius: 50,
+                            spreadRadius: 4,
+                          ),
+                        ],
+                      ),
+                      child: const Icon(
+                        Icons.public,
+                        color: Colors.orange,
+                        size: 90,
+                      ),
+                    ),
 
                     const SizedBox(height: 20),
 

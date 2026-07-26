@@ -106,13 +106,6 @@ class _RegisterScreenState extends State<RegisterScreen> {
                 child: Column(
                   children: [
                     Container(
-                      child: const Icon(
-                        Icons.account_circle,
-
-                        color: Colors.orange,
-
-                        size: 80,
-                      ),
                       decoration: BoxDecoration(
                         boxShadow: [
                           BoxShadow(
@@ -121,6 +114,13 @@ class _RegisterScreenState extends State<RegisterScreen> {
                             spreadRadius: 4,
                           ),
                         ],
+                      ),
+                      child: const Icon(
+                        Icons.account_circle,
+
+                        color: Colors.orange,
+
+                        size: 80,
                       ),
                     ),
 

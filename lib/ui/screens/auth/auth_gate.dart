@@ -1,7 +1,6 @@
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:zelix_rised_trades/ui/screens/auth/login_screen.dart';
-import 'package:zelix_rised_trades/ui/screens/auth/player_setup_screen.dart';
 import 'package:zelix_rised_trades/ui/screens/menu/main_menu_screen.dart';
 
 class AuthGate extends StatelessWidget {
