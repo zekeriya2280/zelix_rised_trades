@@ -1,0 +1,4 @@
+-record(context_takeover, {
+    no_client :: boolean(),
+    no_server :: boolean()
+}).

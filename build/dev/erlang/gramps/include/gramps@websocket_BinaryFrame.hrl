@@ -1,0 +1,3 @@
+-record(binary_frame, {
+    payload :: bitstring()
+}).

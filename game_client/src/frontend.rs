@@ -1,0 +1,930 @@
+use bevy::input::keyboard::{KeyboardInput, Key};
+use bevy::prelude::*;
+
+use crate::core::resources::GameState;
+use crate::network::auth::{request_login, request_register, AuthClient};
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Default)]
+pub enum Screen {
+    #[default]
+    AuthGate,
+    Login,
+    Register,
+    Intro,
+    Lobby,
+    Settings,
+    Game,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum AuthField {
+    LoginEmail,
+    LoginPassword,
+    RegisterEmail,
+    RegisterPassword,
+    RegisterNickname,
+    RoomCode,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum LobbyMode {
+    SinglePlayer,
+    Multiplayer,
+    Online,
+}
+
+impl LobbyMode {
+    fn label(self) -> &'static str {
+        match self {
+            LobbyMode::SinglePlayer => "Single Player",
+            LobbyMode::Multiplayer => "Multiplayer",
+            LobbyMode::Online => "Online",
+        }
+    }
+}
+
+#[derive(Clone, Debug)]
+pub struct UserAccount {
+    pub email: String,
+    pub nickname: String,
+    pub token: String,
+}
+
+#[derive(Resource, Default)]
+pub struct AuthStore {
+    pub current_user: Option<UserAccount>,
+}
+
+#[derive(Clone, Debug)]
+pub struct Room {
+    pub id: String,
+    pub host: String,
+    pub mode: LobbyMode,
+    pub max_players: usize,
+    pub players: Vec<String>,
+    pub started: bool,
+}
+
+#[derive(Resource, Default)]
+pub struct LobbyStore {
+    pub rooms: Vec<Room>,
+    pub next_room: u32,
+}
+
+#[derive(Resource)]
+pub struct FrontendState {
+    pub screen: Screen,
+    pub active_field: Option<AuthField>,
+    pub login_email: String,
+    pub login_password: String,
+    pub register_email: String,
+    pub register_password: String,
+    pub register_nickname: String,
+    pub room_code: String,
+    pub message: String,
+    pub lobby_message: String,
+    pub settings_message: String,
+    pub active_lobby_mode: LobbyMode,
+    pub current_room: Option<String>,
+}
+
+impl Default for FrontendState {
+    fn default() -> Self {
+        Self {
+            screen: Screen::AuthGate,
+            active_field: None,
+            login_email: String::new(),
+            login_password: String::new(),
+            register_email: String::new(),
+            register_password: String::new(),
+            register_nickname: String::new(),
+            room_code: String::new(),
+            message: String::from("Welcome. Start with Login or Register."),
+            lobby_message: String::new(),
+            settings_message: String::new(),
+            active_lobby_mode: LobbyMode::Multiplayer,
+            current_room: None,
+        }
+    }
+}
+
+#[derive(Component)]
+struct FrontendRoot {
+    screen: Screen,
+}
+
+#[derive(Component)]
+struct ScreenLabel;
+
+#[derive(Component)]
+struct MessageLabel;
+
+#[derive(Component)]
+struct LobbyMessageLabel;
+
+#[derive(Component)]
+struct SettingsMessageLabel;
+
+#[derive(Component)]
+struct FieldValue {
+    field: AuthField,
+}
+
+#[derive(Component)]
+struct FocusButton {
+    field: AuthField,
+}
+
+#[derive(Component)]
+struct ActionButton {
+    action: Action,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum Action {
+    GoLogin,
+    GoRegister,
+    GoAuthGate,
+    LoginSubmit,
+    RegisterSubmit,
+    IntroSingle,
+    IntroMulti,
+    IntroOnline,
+    IntroSettings,
+    IntroQuit,
+    LobbyCreate,
+    LobbyJoin,
+    LobbyBack,
+    LobbyStart,
+    LobbyLeave,
+    SettingsBack,
+    GameBack,
+}
+
+const PANEL: Color = Color::srgba(0.07, 0.08, 0.10, 0.96);
+const ACCENT: Color = Color::srgb(0.66, 0.78, 1.0);
+const TEXT: Color = Color::srgb(0.96, 0.97, 1.0);
+const MUTED: Color = Color::srgb(0.72, 0.76, 0.82);
+const DANGER: Color = Color::srgb(1.0, 0.45, 0.45);
+
+pub struct FrontendPlugin;
+
+impl Plugin for FrontendPlugin {
+    fn build(&self, app: &mut App) {
+        app.init_resource::<FrontendState>()
+            .init_resource::<AuthStore>()
+            .init_resource::<LobbyStore>()
+            .add_systems(Startup, setup_frontend_ui_system)
+            .add_systems(
+                Update,
+                (
+                    sync_screen_visibility_system,
+                    focus_field_system,
+                    screen_button_system,
+                    keyboard_input_system,
+                    refresh_field_text_system,
+                    refresh_status_texts_system,
+                    sync_game_pause_system,
+                ),
+            );
+    }
+}
+
+fn setup_frontend_ui_system(mut commands: Commands) {
+    spawn_auth_gate(&mut commands);
+    spawn_login(&mut commands);
+    spawn_register(&mut commands);
+    spawn_intro(&mut commands);
+    spawn_lobby(&mut commands);
+    spawn_settings(&mut commands);
+    spawn_game(&mut commands);
+}
+
+fn spawn_root(commands: &mut Commands, screen: Screen, title: &str) -> Entity {
+    commands
+        .spawn((
+            FrontendRoot { screen },
+            Node {
+                position_type: PositionType::Absolute,
+                width: Val::Percent(100.0),
+                height: Val::Percent(100.0),
+                justify_content: JustifyContent::Center,
+                align_items: AlignItems::Center,
+                flex_direction: FlexDirection::Column,
+                ..default()
+            },
+            BackgroundColor(Color::srgba(0.0, 0.0, 0.0, 0.0)),
+            Visibility::Hidden,
+            ZIndex(2000),
+        ))
+        .with_children(|parent| {
+            parent
+                .spawn((
+                    Node {
+                        width: Val::Px(760.0),
+                        max_width: Val::Percent(92.0),
+                        padding: UiRect::all(Val::Px(24.0)),
+                        flex_direction: FlexDirection::Column,
+                        row_gap: Val::Px(14.0),
+                        border: UiRect::all(Val::Px(1.0)),
+                        ..default()
+                    },
+                    BackgroundColor(PANEL),
+                    BorderColor::all(ACCENT),
+                ))
+                .with_children(|panel| {
+                    panel.spawn((
+                        Text::new(title),
+                        TextFont {
+                            font_size: FontSize::Px(34.0),
+                            ..default()
+                        },
+                        TextColor(TEXT),
+                    ));
+                });
+        })
+        .id()
+}
+
+
+fn spawn_auth_gate(commands: &mut Commands) {
+    let root = spawn_root(commands, Screen::AuthGate, "Zelix Rised Trades");
+    commands.entity(root).with_children(|panel| {
+        spawn_paragraph(panel, "Secure sign-in, nickname check, and online-ready lobby flow.", MUTED);
+        spawn_paragraph(panel, "Your account decides whether you enter Login, Register, or Intro.", MUTED);
+        spawn_button(panel, "Go to Login", Action::GoLogin);
+        spawn_button(panel, "Go to Register", Action::GoRegister);
+        spawn_hint(panel, "After signing in or registering you will be taken to Intro automatically.");
+    });
+}
+
+fn spawn_login(commands: &mut Commands) {
+    let root = spawn_root(commands, Screen::Login, "Login");
+    commands.entity(root).with_children(|panel| {
+        spawn_paragraph(panel, "Enter email and password. Tab cycles fields.", MUTED);
+        spawn_field(panel, "Email", AuthField::LoginEmail);
+        spawn_field(panel, "Password", AuthField::LoginPassword);
+        spawn_button(panel, "Login", Action::LoginSubmit);
+        spawn_button(panel, "Don't have an account? Register", Action::GoRegister);
+        spawn_button(panel, "Back", Action::GoAuthGate);
+        spawn_message(panel);
+    });
+}
+
+fn spawn_register(commands: &mut Commands) {
+    let root = spawn_root(commands, Screen::Register, "Register");
+    commands.entity(root).with_children(|panel| {
+        spawn_paragraph(panel, "Create account, choose a unique nickname, then enter Intro.", MUTED);
+        spawn_field(panel, "Email", AuthField::RegisterEmail);
+        spawn_field(panel, "Password", AuthField::RegisterPassword);
+        spawn_field(panel, "Nickname", AuthField::RegisterNickname);
+        spawn_button(panel, "Create account", Action::RegisterSubmit);
+        spawn_button(panel, "Already have an account? Login", Action::GoLogin);
+        spawn_button(panel, "Back", Action::GoAuthGate);
+        spawn_message(panel);
+    });
+}
+
+fn spawn_intro(commands: &mut Commands) {
+    let root = spawn_root(commands, Screen::Intro, "Intro / Main Menu");
+    commands.entity(root).with_children(|panel| {
+        spawn_paragraph(panel, "Choose a mode. Single Player opens the current game immediately.", MUTED);
+        spawn_button(panel, "Single Player", Action::IntroSingle);
+        spawn_button(panel, "Multiplayer", Action::IntroMulti);
+        spawn_button(panel, "Online", Action::IntroOnline);
+        spawn_button(panel, "Settings", Action::IntroSettings);
+        spawn_button(panel, "Quit", Action::IntroQuit);
+        spawn_message(panel);
+    });
+}
+
+fn spawn_lobby(commands: &mut Commands) {
+    let root = spawn_root(commands, Screen::Lobby, "Lobby");
+    commands.entity(root).with_children(|panel| {
+        spawn_paragraph(panel, "Create a room or join one by code. Rooms cap at 5 players.", MUTED);
+        spawn_field(panel, "Room code", AuthField::RoomCode);
+        spawn_button(panel, "Create game", Action::LobbyCreate);
+        spawn_button(panel, "Enter game", Action::LobbyJoin);
+        spawn_button(panel, "Start game", Action::LobbyStart);
+        spawn_button(panel, "Leave room", Action::LobbyLeave);
+        spawn_button(panel, "Back to Intro", Action::LobbyBack);
+        panel.spawn((
+            Text::new("Rooms will appear here after you create them."),
+            TextFont { font_size: FontSize::Px(14.0), ..default() },
+            TextColor(MUTED),
+            LobbyMessageLabel,
+        ));
+        spawn_message(panel);
+    });
+}
+
+fn spawn_settings(commands: &mut Commands) {
+    let root = spawn_root(commands, Screen::Settings, "Settings");
+    commands.entity(root).with_children(|panel| {
+        spawn_paragraph(panel, "Style, controls, and future sync options live here.", MUTED);
+        spawn_button(panel, "Back to Intro", Action::SettingsBack);
+        panel.spawn((
+            Text::new("VSync: on | UI scale: adaptive | Sound: placeholder"),
+            TextFont { font_size: FontSize::Px(14.0), ..default() },
+            TextColor(MUTED),
+            SettingsMessageLabel,
+        ));
+    });
+}
+
+fn spawn_game(commands: &mut Commands) {
+    // The Game screen deliberately has no overlay panel: once a mode is chosen
+    // (Single Player, Multiplayer, or Online), all menu panels are cleared so
+    // only the world/map underneath is visible. The root is spawned directly
+    // (instead of via `spawn_root`, which adds a centred panel box) with a fully
+    // transparent background so the map is never covered, while still letting
+    // `sync_screen_visibility_system` mark this screen visible when the game
+    // starts and hidden on every other screen.
+    commands.spawn((
+        FrontendRoot { screen: Screen::Game },
+        Node {
+            position_type: PositionType::Absolute,
+            width: Val::Percent(100.0),
+            height: Val::Percent(100.0),
+            ..default()
+        },
+        BackgroundColor(Color::srgba(0.0, 0.0, 0.0, 0.0)),
+        Visibility::Hidden,
+        ZIndex(2000),
+    ));
+}
+
+fn spawn_paragraph(parent: &mut ChildSpawnerCommands, text: &str, color: Color) {
+    parent.spawn((
+        Text::new(text),
+        TextFont { font_size: FontSize::Px(15.0), ..default() },
+        TextColor(color),
+        Node {
+            margin: UiRect::bottom(Val::Px(2.0)),
+            ..default()
+        },
+    ));
+}
+
+fn spawn_hint(parent: &mut ChildSpawnerCommands, text: &str) {
+    parent.spawn((
+        Text::new(text),
+        TextFont { font_size: FontSize::Px(13.0), ..default() },
+        TextColor(Color::srgb(0.58, 0.67, 0.80)),
+    ));
+}
+
+fn spawn_message(parent: &mut ChildSpawnerCommands) {
+    parent.spawn((
+        Text::new(""),
+        TextFont { font_size: FontSize::Px(14.0), ..default() },
+        TextColor(DANGER),
+        MessageLabel,
+    ));
+}
+
+fn spawn_field(parent: &mut ChildSpawnerCommands, label: &str, field: AuthField) {
+    parent
+        .spawn((
+            Button,
+            Interaction::default(),
+            FocusButton { field },
+            Node {
+                width: Val::Percent(100.0),
+                min_height: Val::Px(42.0),
+                padding: UiRect::horizontal(Val::Px(14.0)),
+                justify_content: JustifyContent::SpaceBetween,
+                align_items: AlignItems::Center,
+                border: UiRect::all(Val::Px(1.0)),
+                ..default()
+            },
+            BackgroundColor(Color::srgb(0.14, 0.15, 0.18)),
+            BorderColor::all(Color::srgb(0.28, 0.32, 0.40)),
+        ))
+        .with_children(|row| {
+            row.spawn((
+                Text::new(label),
+                TextFont { font_size: FontSize::Px(14.0), ..default() },
+                TextColor(ACCENT),
+            ));
+            row.spawn((
+                Text::new(""),
+                TextFont { font_size: FontSize::Px(14.0), ..default() },
+                TextColor(TEXT),
+                FieldValue { field },
+            ));
+        });
+}
+
+fn spawn_button(parent: &mut ChildSpawnerCommands, label: &str, action: Action) {
+    parent
+        .spawn((
+            Button,
+            Interaction::default(),
+            ActionButton { action },
+            Node {
+                width: Val::Percent(100.0),
+                min_height: Val::Px(42.0),
+                padding: UiRect::horizontal(Val::Px(14.0)),
+                justify_content: JustifyContent::Center,
+                align_items: AlignItems::Center,
+                border: UiRect::all(Val::Px(1.0)),
+                ..default()
+            },
+            BackgroundColor(Color::srgb(0.14, 0.15, 0.18)),
+            BorderColor::all(Color::srgb(0.28, 0.32, 0.40)),
+        ))
+        .with_children(|row| {
+            row.spawn((
+                Text::new(label),
+                TextFont { font_size: FontSize::Px(15.0), ..default() },
+                TextColor(TEXT),
+            ));
+        });
+}
+
+
+fn focus_field_system(
+    mut state: ResMut<FrontendState>,
+    buttons: Query<(&Interaction, &FocusButton), (Changed<Interaction>, With<Button>)>,
+) {
+    for (interaction, button) in &buttons {
+        if *interaction == Interaction::Pressed {
+            state.active_field = Some(button.field);
+        }
+    }
+}
+
+fn sync_screen_visibility_system(
+    state: Res<FrontendState>,
+    mut query: Query<(&FrontendRoot, &mut Visibility)>,
+) {
+    for (root, mut visibility) in &mut query {
+        *visibility = if root.screen == state.screen {
+            Visibility::Visible
+        } else {
+            Visibility::Hidden
+        };
+    }
+}
+
+fn refresh_field_text_system(
+    state: Res<FrontendState>,
+    mut fields: Query<(&FieldValue, &mut Text)>,
+) {
+    if !state.is_changed() {
+        // Still refresh each frame because the text buffers are tiny and the
+        // screen needs to stay visually in sync while typing.
+    }
+
+    for (field, mut text) in &mut fields {
+        let value = match field.field {
+            AuthField::LoginEmail => mask_or_show(&state.login_email, false),
+            AuthField::LoginPassword => mask_or_show(&state.login_password, true),
+            AuthField::RegisterEmail => mask_or_show(&state.register_email, false),
+            AuthField::RegisterPassword => mask_or_show(&state.register_password, true),
+            AuthField::RegisterNickname => mask_or_show(&state.register_nickname, false),
+            AuthField::RoomCode => mask_or_show(&state.room_code, false),
+        };
+        *text = Text::new(value);
+    }
+}
+
+fn refresh_status_texts_system(
+    state: Res<FrontendState>,
+    auth: Res<AuthStore>,
+    lobby: Res<LobbyStore>,
+    mut message: Query<
+        &mut Text,
+        (
+            With<MessageLabel>,
+            Without<LobbyMessageLabel>,
+            Without<SettingsMessageLabel>,
+        ),
+    >,
+    mut lobby_message: Query<
+        &mut Text,
+        (
+            With<LobbyMessageLabel>,
+            Without<MessageLabel>,
+            Without<SettingsMessageLabel>,
+        ),
+    >,
+    mut settings_message: Query<
+        &mut Text,
+        (
+            With<SettingsMessageLabel>,
+            Without<MessageLabel>,
+            Without<LobbyMessageLabel>,
+        ),
+    >,
+) {
+    if let Ok(mut text) = message.single_mut() {
+        let mut body = state.message.clone();
+        if let Some(user) = &auth.current_user {
+            body.push_str(&format!("\nSigned in as {}", user.nickname));
+        }
+        if let Some(room) = state.current_room.as_ref() {
+            body.push_str(&format!("\nRoom: {}", room));
+        }
+        *text = Text::new(body);
+    }
+
+    if let Ok(mut text) = lobby_message.single_mut() {
+        let mut body = if lobby.rooms.is_empty() {
+            String::from("No rooms yet. Create one to start.")
+        } else {
+            let mut rows = Vec::new();
+            for room in &lobby.rooms {
+                rows.push(format!(
+                    "{} | {} | {}/{} | host: {}{}",
+                    room.id,
+                    room.mode.label(),
+                    room.players.len(),
+                    room.max_players,
+                    room.host,
+                    if room.started { " | started" } else { "" },
+                ));
+            }
+            rows.join("\n")
+        };
+        if !state.lobby_message.is_empty() {
+            if !body.is_empty() {
+                body.push_str("\n\n");
+            }
+            body.push_str(&state.lobby_message);
+        }
+        *text = Text::new(body);
+    }
+
+    if let Ok(mut text) = settings_message.single_mut() {
+        *text = Text::new(if state.settings_message.is_empty() {
+            "VSync: on | UI scale: adaptive | Sound: placeholder".to_string()
+        } else {
+            state.settings_message.clone()
+        });
+    }
+}
+
+fn keyboard_input_system(
+    mut events: MessageReader<KeyboardInput>,
+    mut state: ResMut<FrontendState>,
+    client: Res<AuthClient>,
+    keys: Res<ButtonInput<KeyCode>>,
+) {
+    for ev in events.read() {
+        let Some(focused) = state.active_field else {
+            continue;
+        };
+
+        // Special keys first.
+        if ev.state != bevy::input::ButtonState::Pressed {
+            continue;
+        }
+
+        if keys.just_pressed(KeyCode::Tab) {
+            let reverse = keys.pressed(KeyCode::ShiftLeft) || keys.pressed(KeyCode::ShiftRight);
+            state.active_field = Some(next_field(focused, state.screen, reverse));
+            continue;
+        }
+                if keys.just_pressed(KeyCode::Enter) {
+            // Enter submits the current screen's primary action (login / register)
+            // to the server; the result arrives on the next frame poll.
+            match state.screen {
+                Screen::Login => {
+                    let email = state.login_email.trim();
+                    let password = state.login_password.as_str();
+                    if email.is_empty() || password.is_empty() {
+                        state.message = String::from("Fill in email and password.");
+                    } else {
+                        request_login(&client, email, password);
+                        state.message = String::from("Signing in...");
+                    }
+                }
+                Screen::Register => {
+                    let email = state.register_email.trim();
+                    let password = state.register_password.as_str();
+                    let nickname = state.register_nickname.trim();
+                    if email.is_empty() || password.is_empty() || nickname.is_empty() {
+                        state.message = String::from("Email, password, and nickname are required.");
+                                        } else {
+                        request_register(&client, email, password, nickname);
+                        state.message = String::from("Creating account...");
+                    }
+                }
+                _ => {}
+            }
+            continue;
+        }
+        if keys.just_pressed(KeyCode::Backspace) {
+            current_buffer_mut(&mut state, focused).pop();
+            continue;
+        }
+
+        if let Some(text) = key_text(ev) {
+            let buffer = current_buffer_mut(&mut state, focused);
+            for ch in text.chars() {
+                if !ch.is_control() && buffer.len() < 64 {
+                    buffer.push(ch);
+                }
+            }
+        }
+    }
+}
+
+fn key_text(ev: &KeyboardInput) -> Option<&str> {
+    match &ev.logical_key {
+        Key::Character(text) => Some(text.as_ref()),
+        _ => None,
+    }
+}
+
+fn current_buffer_mut<'a>(state: &'a mut FrontendState, field: AuthField) -> &'a mut String {
+    match field {
+        AuthField::LoginEmail => &mut state.login_email,
+        AuthField::LoginPassword => &mut state.login_password,
+        AuthField::RegisterEmail => &mut state.register_email,
+        AuthField::RegisterPassword => &mut state.register_password,
+        AuthField::RegisterNickname => &mut state.register_nickname,
+        AuthField::RoomCode => &mut state.room_code,
+    }
+}
+
+fn next_field(current: AuthField, screen: Screen, reverse: bool) -> AuthField {
+    match screen {
+        Screen::Login => {
+            let order = [AuthField::LoginEmail, AuthField::LoginPassword];
+            cycle_field(current, &order, reverse)
+        }
+        Screen::Register => {
+            let order = [
+                AuthField::RegisterEmail,
+                AuthField::RegisterPassword,
+                AuthField::RegisterNickname,
+            ];
+            cycle_field(current, &order, reverse)
+        }
+        Screen::Lobby => AuthField::RoomCode,
+        _ => current,
+    }
+}
+
+/// Cycles to the next field in `order`, wrapping around. When `reverse` is true
+/// (Shift+Tab), it cycles in the opposite direction.
+fn cycle_field(current: AuthField, order: &[AuthField], reverse: bool) -> AuthField {
+    if let Some(pos) = order.iter().position(|field| *field == current) {
+        let step = if reverse { order.len() - 1 } else { 1 };
+        order[(pos + step) % order.len()]
+    } else {
+        order[0]
+    }
+}
+
+fn screen_button_system(
+    mut state: ResMut<FrontendState>,
+    mut auth: ResMut<AuthStore>,
+    mut lobby: ResMut<LobbyStore>,
+    mut game: ResMut<GameState>,
+    client: Res<AuthClient>,
+    buttons: Query<(&Interaction, &ActionButton), (Changed<Interaction>, With<Button>)>,
+) {
+    for (interaction, button) in &buttons {
+        if *interaction != Interaction::Pressed {
+            continue;
+        }
+
+        match button.action {
+            Action::GoLogin => {
+                state.screen = Screen::Login;
+                state.active_field = Some(AuthField::LoginEmail);
+                state.message = String::from("Login with your account.");
+                game.paused = true;
+            }
+            Action::GoRegister => {
+                state.screen = Screen::Register;
+                state.active_field = Some(AuthField::RegisterEmail);
+                state.message = String::from("Register a new account.");
+                game.paused = true;
+            }
+            Action::GoAuthGate => {
+                state.screen = Screen::AuthGate;
+                state.active_field = None;
+                state.message = String::from("Welcome. Start with Login or Register.");
+                game.paused = true;
+            }
+            Action::LoginSubmit => {
+                let email = state.login_email.trim();
+                let password = state.login_password.as_str();
+                if email.is_empty() || password.is_empty() {
+                    state.message = String::from("Fill in email and password.");
+                } else {
+                                        request_login(&client, email, password);
+                    state.message = String::from("Signing in...");
+                }
+                game.paused = true;
+            }
+            Action::RegisterSubmit => {
+                let email = state.register_email.trim();
+                let password = state.register_password.as_str();
+                let nickname = state.register_nickname.trim();
+                if email.is_empty() || password.is_empty() || nickname.is_empty() {
+                    state.message = String::from("Email, password, and nickname are required.");
+                } else {
+                                        request_register(&client, email, password, nickname);
+                    state.message = String::from("Creating account...");
+                }
+                game.paused = true;
+            }
+            Action::IntroSingle => {
+                state.screen = Screen::Game;
+                state.current_room = None;
+                state.message = String::from("Single player loaded.");
+                game.paused = false;
+            }
+            Action::IntroMulti => {
+                state.screen = Screen::Lobby;
+                state.active_lobby_mode = LobbyMode::Multiplayer;
+                state.active_field = Some(AuthField::RoomCode);
+                state.lobby_message = String::from("Multiplayer lobby ready.");
+                game.paused = true;
+            }
+            Action::IntroOnline => {
+                state.screen = Screen::Lobby;
+                state.active_lobby_mode = LobbyMode::Online;
+                state.active_field = Some(AuthField::RoomCode);
+                state.lobby_message = String::from("Online room lobby ready.");
+                game.paused = true;
+            }
+            Action::IntroSettings => {
+                state.screen = Screen::Settings;
+                state.active_field = None;
+                state.settings_message = String::from("Graphics: optimal | Input: keyboard/mouse | Network: ready for backend.");
+                game.paused = true;
+            }
+            Action::IntroQuit => {
+                std::process::exit(0);
+            }
+            Action::LobbyCreate => {
+                create_room(&mut state, &mut auth, &mut lobby);
+            }
+            Action::LobbyJoin => {
+                join_room(&mut state, &mut auth, &mut lobby);
+            }
+            Action::LobbyBack => {
+                state.screen = Screen::Intro;
+                state.active_field = None;
+                state.lobby_message.clear();
+                game.paused = true;
+            }
+            Action::LobbyStart => {
+                if let Some(room_id) = state.current_room.clone() {
+                    let Some(user) = auth.current_user.as_ref() else {
+                        state.lobby_message = String::from("Login first.");
+                        continue;
+                    };
+                    if let Some(room) = lobby.rooms.iter_mut().find(|r| r.id == room_id) {
+                        if !room.host.eq_ignore_ascii_case(&user.nickname) {
+                            state.lobby_message = String::from("Only the host can start the room.");
+                            continue;
+                        }
+                        room.started = true;
+                        state.screen = Screen::Game;
+                        state.message = format!("Room {} started with {} players.", room.id, room.players.len());
+                        game.paused = false;
+                    }
+                } else {
+                    state.lobby_message = String::from("Join or create a room first.");
+                }
+            }
+            Action::LobbyLeave => {
+                leave_room(&mut state, &mut auth, &mut lobby);
+                state.screen = Screen::Intro;
+                state.active_field = None;
+                game.paused = true;
+            }
+            Action::SettingsBack => {
+                state.screen = Screen::Intro;
+                state.active_field = None;
+                game.paused = true;
+            }
+            Action::GameBack => {
+                state.screen = Screen::Intro;
+                state.active_field = None;
+                state.message = String::from("Returned to main menu.");
+                game.paused = true;
+            }
+        }
+    }
+}
+
+fn create_room(state: &mut FrontendState, auth: &mut AuthStore, lobby: &mut LobbyStore) {
+    let Some(user) = auth.current_user.as_ref() else {
+        state.lobby_message = String::from("Login first.");
+        return;
+    };
+
+    if lobby
+        .rooms
+        .iter()
+        .any(|room| room.players.iter().any(|player| player.eq_ignore_ascii_case(&user.nickname)))
+    {
+        state.lobby_message = String::from("You are already in a room.");
+        return;
+    }
+
+    lobby.next_room += 1;
+    let id = format!("RM{:04}", lobby.next_room);
+    let room = Room {
+        id: id.clone(),
+        host: user.nickname.clone(),
+        mode: state.active_lobby_mode,
+        max_players: 5,
+        players: vec![user.nickname.clone()],
+        started: false,
+    };
+    lobby.rooms.push(room);
+    state.current_room = Some(id.clone());
+    state.room_code = id.clone();
+    state.lobby_message = format!("Room {} created.", id);
+}
+
+fn join_room(state: &mut FrontendState, auth: &mut AuthStore, lobby: &mut LobbyStore) {
+    let Some(user) = auth.current_user.as_ref() else {
+        state.lobby_message = String::from("Login first.");
+        return;
+    };
+
+    let code = state.room_code.trim();
+    if code.is_empty() {
+        state.lobby_message = String::from("Enter a room code.");
+        return;
+    }
+
+    let Some(room) = lobby.rooms.iter_mut().find(|room| room.id.eq_ignore_ascii_case(code)) else {
+        state.lobby_message = String::from("Room not found.");
+        return;
+    };
+
+    if room.players.iter().any(|name| name.eq_ignore_ascii_case(&user.nickname)) {
+        state.current_room = Some(room.id.clone());
+        state.lobby_message = String::from("You are already in this room.");
+        return;
+    }
+
+    if room.players.len() >= room.max_players {
+        state.lobby_message = String::from("Room is full.");
+        return;
+    }
+
+    room.players.push(user.nickname.clone());
+    state.current_room = Some(room.id.clone());
+    state.lobby_message = format!("Joined room {}.", room.id);
+}
+
+fn leave_room(state: &mut FrontendState, auth: &mut AuthStore, lobby: &mut LobbyStore) {
+    let Some(user) = auth.current_user.as_ref() else {
+        state.current_room = None;
+        return;
+    };
+
+    if let Some(room_id) = state.current_room.clone() {
+        if let Some(pos) = lobby.rooms.iter().position(|room| room.id == room_id) {
+            let mut remove_room = false;
+            {
+                let room = &mut lobby.rooms[pos];
+                room.players.retain(|name| !name.eq_ignore_ascii_case(&user.nickname));
+                if room.players.is_empty() {
+                    remove_room = true;
+                } else if room.host.eq_ignore_ascii_case(&user.nickname) {
+                    room.host = room.players[0].clone();
+                }
+            }
+            if remove_room {
+                lobby.rooms.remove(pos);
+            }
+        }
+    }
+    state.current_room = None;
+    state.room_code.clear();
+}
+
+fn mask_or_show(value: &str, secret: bool) -> String {
+    if secret {
+        if value.is_empty() {
+            String::from("<empty>")
+        } else {
+            "•".repeat(value.chars().count())
+        }
+    } else if value.is_empty() {
+        String::from("<empty>")
+    } else {
+        value.to_string()
+    }
+}
+
+fn sync_game_pause_system(state: Res<FrontendState>, mut game: ResMut<GameState>) {
+    let should_pause = !matches!(state.screen, Screen::Game);
+    if game.paused != should_pause {
+        game.paused = should_pause;
+    }
+}

@@ -1,0 +1,4 @@
+-record(connection_info, {
+    port :: integer(),
+    ip_address :: glisten:ip_address()
+}).

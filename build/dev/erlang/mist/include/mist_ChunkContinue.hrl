@@ -1,0 +1,3 @@
+-record(chunk_continue, {
+    state :: any()
+}).

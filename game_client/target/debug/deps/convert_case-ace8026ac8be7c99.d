@@ -1,0 +1,11 @@
+C:\FlutterWorks\game_server\game_client\target\debug\deps\convert_case-ace8026ac8be7c99.d: C:\Users\zeker\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\convert_case-0.10.0\src\lib.rs C:\Users\zeker\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\convert_case-0.10.0\src\boundary.rs C:\Users\zeker\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\convert_case-0.10.0\src\case.rs C:\Users\zeker\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\convert_case-0.10.0\src\converter.rs C:\Users\zeker\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\convert_case-0.10.0\src\pattern.rs
+
+C:\FlutterWorks\game_server\game_client\target\debug\deps\libconvert_case-ace8026ac8be7c99.rlib: C:\Users\zeker\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\convert_case-0.10.0\src\lib.rs C:\Users\zeker\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\convert_case-0.10.0\src\boundary.rs C:\Users\zeker\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\convert_case-0.10.0\src\case.rs C:\Users\zeker\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\convert_case-0.10.0\src\converter.rs C:\Users\zeker\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\convert_case-0.10.0\src\pattern.rs
+
+C:\FlutterWorks\game_server\game_client\target\debug\deps\libconvert_case-ace8026ac8be7c99.rmeta: C:\Users\zeker\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\convert_case-0.10.0\src\lib.rs C:\Users\zeker\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\convert_case-0.10.0\src\boundary.rs C:\Users\zeker\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\convert_case-0.10.0\src\case.rs C:\Users\zeker\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\convert_case-0.10.0\src\converter.rs C:\Users\zeker\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\convert_case-0.10.0\src\pattern.rs
+
+C:\Users\zeker\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\convert_case-0.10.0\src\lib.rs:
+C:\Users\zeker\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\convert_case-0.10.0\src\boundary.rs:
+C:\Users\zeker\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\convert_case-0.10.0\src\case.rs:
+C:\Users\zeker\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\convert_case-0.10.0\src\converter.rs:
+C:\Users\zeker\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\convert_case-0.10.0\src\pattern.rs:

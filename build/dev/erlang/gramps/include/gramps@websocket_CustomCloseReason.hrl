@@ -1,0 +1,4 @@
+-record(custom_close_reason, {
+    code :: integer(),
+    body :: bitstring()
+}).

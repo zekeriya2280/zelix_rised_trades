@@ -1,0 +1,20 @@
+{application, game_server, [
+    {vsn, "1.0.0"},
+    {applications, [gleam_erlang,
+                    gleam_http,
+                    gleam_httpc,
+                    gleam_json,
+                    gleam_stdlib,
+                    gleeunit,
+                    mist]},
+    {description, ""},
+    {modules, [game_server,
+               game_server@@main,
+               game_server_os_ffi,
+               main,
+               server@auth,
+               server@messages,
+               server@router,
+               server@websocket]},
+    {registered, []}
+]}.

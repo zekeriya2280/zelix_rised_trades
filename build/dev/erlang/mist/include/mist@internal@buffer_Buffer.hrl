@@ -1,0 +1,4 @@
+-record(buffer, {
+    remaining :: integer(),
+    data :: bitstring()
+}).

@@ -1,0 +1,3 @@
+-record(missing_extensions, {
+    body :: bitstring()
+}).
