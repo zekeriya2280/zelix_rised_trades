@@ -93,16 +93,19 @@ pub fn update_ui_system(
 /// Refresh the on-screen material inventory from the global stockpiles.
 pub fn update_materials_hud(
     inventory: Res<MaterialInventory>,
+    game: Res<GameState>,
     mut text: Query<&mut Text, With<MaterialsText>>,
 ) {
     if let Ok(mut t) = text.single_mut() {
         *t = Text::new(format!(
-            "Ahsap (Wood): {}\nTas (Stone): {}\nDemir (Iron): {}\nAltin (Gold): {}\nTahil (Grain): {}",
+            "Ahsap (Wood): {}\nTas (Stone): {}\nDemir (Iron): {}\nAltin (Gold): {}\nTahil (Grain): {}\nStorage: {}/{}",
             inventory.get(ProductType::Wood),
             inventory.get(ProductType::Stone),
             inventory.get(ProductType::Iron),
             inventory.get(ProductType::Gold),
             inventory.get(ProductType::Grain),
+            game.storage_used,
+            game.storage_capacity,
         ));
     }
 }

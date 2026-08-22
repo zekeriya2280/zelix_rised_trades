@@ -5,14 +5,14 @@
 
 -type ws_state() :: {ws_state, gleam@erlang@process:subject(game_server:message()), gleam@option:option(integer())}.
 
--file("src\\server\\router.gleam", 179).
+-file("src\\server\\router.gleam", 277).
 -spec text(integer(), binary()) -> gleam@http@response:response(mist:response_data()).
 text(Status, Body) ->
     _pipe = gleam@http@response:new(Status),
     _pipe@1 = gleam@http@response:set_header(_pipe, ~"content-type", ~"text/plain; charset=utf-8"),
     gleam@http@response:set_body(_pipe@1, {bytes, gleam_stdlib:wrap_list(Body)}).
 
--file("src\\server\\router.gleam", 185).
+-file("src\\server\\router.gleam", 283).
 -spec auth_response(gleam@http@request:request(mist@internal@http:connection()), binary()) -> gleam@http@response:response(mist:response_data()).
 auth_response(Request, Action) ->
     case erlang:element(2, Request) of
@@ -43,7 +43,7 @@ auth_response(Request, Action) ->
             text(405, ~"method not allowed")
     end.
 
--file("src\\server\\router.gleam", 172).
+-file("src\\server\\router.gleam", 270).
 -spec disconnect_player(ws_state()) -> nil.
 disconnect_player(State) ->
     case erlang:element(3, State) of
@@ -54,18 +54,18 @@ disconnect_player(State) ->
             nil
     end.
 
--file("src\\server\\router.gleam", 168).
+-file("src\\server\\router.gleam", 266).
 -spec ignore_send(mist@internal@websocket:websocket_connection(), server@messages:server_message()) -> {ok, nil} | {error, glisten@socket:socket_reason()}.
 ignore_send(Connection, Message) ->
     _ = mist:send_text_frame(Connection, server@messages:encode_server(Message)).
 
--file("src\\server\\router.gleam", 163).
+-file("src\\server\\router.gleam", 261).
 -spec send_and_continue(ws_state(), mist@internal@websocket:websocket_connection(), server@messages:server_message()) -> mist:next(ws_state(), nil).
 send_and_continue(State, Connection, Message) ->
     _ = ignore_send(Connection, Message),
     mist:continue(State).
 
--file("src\\server\\router.gleam", 143).
+-file("src\\server\\router.gleam", 241).
 -spec send_snapshot_for(ws_state(), mist@internal@websocket:websocket_connection()) -> {ok, nil} | {error, binary()}.
 send_snapshot_for(State, Connection) ->
     case erlang:element(3, State) of
@@ -93,7 +93,7 @@ send_snapshot_for(State, Connection) ->
             end
     end.
 
--file("src\\server\\router.gleam", 81).
+-file("src\\server\\router.gleam", 164).
 -spec handle_snapshot(ws_state(), mist@internal@websocket:websocket_connection()) -> mist:next(ws_state(), nil).
 handle_snapshot(State, Connection) ->
     case erlang:element(3, State) of
@@ -110,7 +110,7 @@ handle_snapshot(State, Connection) ->
             end
     end.
 
--file("src\\server\\router.gleam", 135).
+-file("src\\server\\router.gleam", 218).
 -spec send_command_result(ws_state(), mist@internal@websocket:websocket_connection(), gleam@erlang@process:subject({ok, nil} | {error, binary()})) -> mist:next(ws_state(), nil).
 send_command_result(State, Connection, Reply) ->
     case gleam@erlang@process:'receive'(Reply, 1000) of
@@ -124,7 +124,7 @@ send_command_result(State, Connection, Reply) ->
             send_and_continue(State, Connection, {server_error, ~"World timeout."})
     end.
 
--file("src\\server\\router.gleam", 124).
+-file("src\\server\\router.gleam", 207).
 -spec handle_set_factory_product(ws_state(), mist@internal@websocket:websocket_connection(), integer(), server@messages:product_type()) -> mist:next(ws_state(), nil).
 handle_set_factory_product(State, Connection, Id, Product) ->
     case erlang:element(3, State) of
@@ -137,7 +137,7 @@ handle_set_factory_product(State, Connection, Id, Product) ->
             send_command_result(State, Connection, Reply)
     end.
 
--file("src\\server\\router.gleam", 113).
+-file("src\\server\\router.gleam", 196).
 -spec handle_spawn_vehicle(ws_state(), mist@internal@websocket:websocket_connection(), float(), float(), float(), float(), float()) -> mist:next(ws_state(), nil).
 handle_spawn_vehicle(State, Connection, X, Y, Tx, Ty, Speed) ->
     case erlang:element(3, State) of
@@ -150,7 +150,7 @@ handle_spawn_vehicle(State, Connection, X, Y, Tx, Ty, Speed) ->
             send_command_result(State, Connection, Reply)
     end.
 
--file("src\\server\\router.gleam", 102).
+-file("src\\server\\router.gleam", 185).
 -spec handle_build_structure(ws_state(), mist@internal@websocket:websocket_connection(), server@messages:building_type(), float(), float()) -> mist:next(ws_state(), nil).
 handle_build_structure(State, Connection, Building, X, Y) ->
     case erlang:element(3, State) of
@@ -163,7 +163,7 @@ handle_build_structure(State, Connection, Building, X, Y) ->
             send_command_result(State, Connection, Reply)
     end.
 
--file("src\\server\\router.gleam", 91).
+-file("src\\server\\router.gleam", 174).
 -spec handle_build_bank(ws_state(), mist@internal@websocket:websocket_connection(), float(), float()) -> mist:next(ws_state(), nil).
 handle_build_bank(State, Connection, X, Y) ->
     case erlang:element(3, State) of
@@ -176,9 +176,138 @@ handle_build_bank(State, Connection, X, Y) ->
             send_command_result(State, Connection, Reply)
     end.
 
--file("src\\server\\router.gleam", 51).
--spec handle_join(ws_state(), mist@internal@websocket:websocket_connection(), binary(), binary()) -> mist:next(ws_state(), nil).
-handle_join(State, Connection, Name, Token) ->
+-file("src\\server\\router.gleam", 226).
+-spec send_lobby_for(ws_state(), mist@internal@websocket:websocket_connection()) -> {ok, nil} | {error, binary()}.
+send_lobby_for(State, Connection) ->
+    case erlang:element(3, State) of
+        none ->
+            {error, ~"Authentication required."};
+
+        {some, Player_id} ->
+            Reply = gleam@erlang@process:new_subject(),
+            gleam@erlang@process:send(erlang:element(2, State), {get_lobby, Player_id, Reply}),
+            case gleam@erlang@process:'receive'(Reply, 1000) of
+                {ok, {ok, Data}} ->
+                    case mist:send_text_frame(Connection, Data) of
+                        {ok, nil} ->
+                            {ok, nil};
+
+                        {error, _} ->
+                            {error, ~"Failed to send lobby state."}
+                    end;
+
+                {ok, {error, Message}} ->
+                    {error, Message};
+
+                {error, nil} ->
+                    {error, ~"Lobby timeout."}
+            end
+    end.
+
+-file("src\\server\\router.gleam", 145).
+-spec handle_lobby_leave(ws_state(), mist@internal@websocket:websocket_connection()) -> mist:next(ws_state(), nil).
+handle_lobby_leave(State, Connection) ->
+    case erlang:element(3, State) of
+        none ->
+            send_and_continue(State, Connection, {server_error, ~"Authentication required."});
+
+        {some, Player_id} ->
+            Reply = gleam@erlang@process:new_subject(),
+            gleam@erlang@process:send(erlang:element(2, State), {leave_room, Player_id, Reply}),
+            case gleam@erlang@process:'receive'(Reply, 1000) of
+                {ok, {ok, nil}} ->
+                    _ = send_lobby_for(State, Connection),
+                    _ = send_snapshot_for(State, Connection),
+                    mist:continue(State);
+
+                {ok, {error, Message}} ->
+                    send_and_continue(State, Connection, {command_rejected, Message});
+
+                {error, nil} ->
+                    send_and_continue(State, Connection, {server_error, ~"Lobby timeout."})
+            end
+    end.
+
+-file("src\\server\\router.gleam", 126).
+-spec handle_lobby_start(ws_state(), mist@internal@websocket:websocket_connection()) -> mist:next(ws_state(), nil).
+handle_lobby_start(State, Connection) ->
+    case erlang:element(3, State) of
+        none ->
+            send_and_continue(State, Connection, {server_error, ~"Authentication required."});
+
+        {some, Player_id} ->
+            Reply = gleam@erlang@process:new_subject(),
+            gleam@erlang@process:send(erlang:element(2, State), {start_room, Player_id, Reply}),
+            case gleam@erlang@process:'receive'(Reply, 1000) of
+                {ok, {ok, nil}} ->
+                    _ = send_lobby_for(State, Connection),
+                    _ = send_snapshot_for(State, Connection),
+                    mist:continue(State);
+
+                {ok, {error, Message}} ->
+                    send_and_continue(State, Connection, {command_rejected, Message});
+
+                {error, nil} ->
+                    send_and_continue(State, Connection, {server_error, ~"Lobby timeout."})
+            end
+    end.
+
+-file("src\\server\\router.gleam", 108).
+-spec handle_lobby_join(ws_state(), mist@internal@websocket:websocket_connection(), binary()) -> mist:next(ws_state(), nil).
+handle_lobby_join(State, Connection, Code) ->
+    case erlang:element(3, State) of
+        none ->
+            send_and_continue(State, Connection, {server_error, ~"Authentication required."});
+
+        {some, Player_id} ->
+            Reply = gleam@erlang@process:new_subject(),
+            gleam@erlang@process:send(erlang:element(2, State), {join_room, Player_id, Code, Reply}),
+            case gleam@erlang@process:'receive'(Reply, 1000) of
+                {ok, {ok, _}} ->
+                    _ = send_lobby_for(State, Connection),
+                    mist:continue(State);
+
+                {ok, {error, Message}} ->
+                    send_and_continue(State, Connection, {command_rejected, Message});
+
+                {error, nil} ->
+                    send_and_continue(State, Connection, {server_error, ~"Lobby timeout."})
+            end
+    end.
+
+-file("src\\server\\router.gleam", 90).
+-spec handle_lobby_create(ws_state(), mist@internal@websocket:websocket_connection(), binary()) -> mist:next(ws_state(), nil).
+handle_lobby_create(State, Connection, Mode) ->
+    case erlang:element(3, State) of
+        none ->
+            send_and_continue(State, Connection, {server_error, ~"Authentication required."});
+
+        {some, Player_id} ->
+            Reply = gleam@erlang@process:new_subject(),
+            gleam@erlang@process:send(erlang:element(2, State), {create_room, Player_id, Mode, Reply}),
+            case gleam@erlang@process:'receive'(Reply, 1000) of
+                {ok, {ok, _}} ->
+                    _ = send_lobby_for(State, Connection),
+                    mist:continue(State);
+
+                {ok, {error, Message}} ->
+                    send_and_continue(State, Connection, {command_rejected, Message});
+
+                {error, nil} ->
+                    send_and_continue(State, Connection, {server_error, ~"Lobby timeout."})
+            end
+    end.
+
+-file("src\\server\\router.gleam", 84).
+-spec handle_ping(ws_state(), mist@internal@websocket:websocket_connection()) -> mist:next(ws_state(), nil).
+handle_ping(State, Connection) ->
+    _ = ignore_send(Connection, pong),
+    _ = send_lobby_for(State, Connection),
+    mist:continue(State).
+
+-file("src\\server\\router.gleam", 55).
+-spec handle_join(ws_state(), mist@internal@websocket:websocket_connection(), binary()) -> mist:next(ws_state(), nil).
+handle_join(State, Connection, Token) ->
     case erlang:element(3, State) of
         {some, _} ->
             send_and_continue(State, Connection, {server_error, ~"Already authenticated."});
@@ -189,19 +318,20 @@ handle_join(State, Connection, Name, Token) ->
                     send_and_continue(State, Connection, {server_error, ~"Authentication required."});
 
                 false ->
-                    case server@auth:verify_token(Token) of
+                    case server@auth:verify_identity(Token) of
                         {error, _} ->
                             send_and_continue(State, Connection, {server_error, ~"Invalid authentication token."});
 
-                        {ok, Uid} ->
+                        {ok, {Uid, Nickname}} ->
                             Reply = gleam@erlang@process:new_subject(),
-                            gleam@erlang@process:send(erlang:element(2, State), {join_player, Uid, Name, Reply}),
+                            gleam@erlang@process:send(erlang:element(2, State), {join_player, Uid, Nickname, Reply}),
                             case gleam@erlang@process:'receive'(Reply, 1000) of
                                 {ok, {ok, Player_id}} ->
                                     New_state = {ws_state, erlang:element(2, State), {some, Player_id}},
+                                    _ = ignore_send(Connection, {welcome, Player_id}),
+                                    _ = send_lobby_for(New_state, Connection),
                                     case send_snapshot_for(New_state, Connection) of
                                         {ok, _} ->
-                                            _ = ignore_send(Connection, {welcome, Player_id}),
                                             mist:continue(New_state);
 
                                         {error, Message} ->
@@ -224,14 +354,26 @@ handle_ws(State, Message, Connection) ->
     case Message of
         {text, Text} ->
             case server@messages:decode_client(Text) of
-                {ok, {join, Name, Token}} ->
-                    handle_join(State, Connection, Name, Token);
+                {ok, {join, Token}} ->
+                    handle_join(State, Connection, Token);
 
                 {ok, ping} ->
-                    send_and_continue(State, Connection, pong);
+                    handle_ping(State, Connection);
 
                 {ok, request_snapshot} ->
                     handle_snapshot(State, Connection);
+
+                {ok, {lobby_create, Mode}} ->
+                    handle_lobby_create(State, Connection, Mode);
+
+                {ok, {lobby_join, Code}} ->
+                    handle_lobby_join(State, Connection, Code);
+
+                {ok, lobby_start} ->
+                    handle_lobby_start(State, Connection);
+
+                {ok, lobby_leave} ->
+                    handle_lobby_leave(State, Connection);
 
                 {ok, {build_bank, X, Y}} ->
                     handle_build_bank(State, Connection, X, Y);

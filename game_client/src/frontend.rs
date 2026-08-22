@@ -3,6 +3,7 @@ use bevy::prelude::*;
 
 use crate::core::resources::GameState;
 use crate::network::auth::{request_login, request_register, AuthClient};
+use crate::network::NetworkClient;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Default)]
 pub enum Screen {
@@ -68,7 +69,6 @@ pub struct Room {
 #[derive(Resource, Default)]
 pub struct LobbyStore {
     pub rooms: Vec<Room>,
-    pub next_room: u32,
 }
 
 #[derive(Resource)]
@@ -309,7 +309,7 @@ fn spawn_lobby(commands: &mut Commands) {
         spawn_button(panel, "Leave room", Action::LobbyLeave);
         spawn_button(panel, "Back to Intro", Action::LobbyBack);
         panel.spawn((
-            Text::new("Rooms will appear here after you create them."),
+            Text::new("Server room status appears here. Create a room or enter its code."),
             TextFont { font_size: FontSize::Px(14.0), ..default() },
             TextColor(MUTED),
             LobbyMessageLabel,
@@ -683,9 +683,9 @@ fn cycle_field(current: AuthField, order: &[AuthField], reverse: bool) -> AuthFi
 fn screen_button_system(
     mut state: ResMut<FrontendState>,
     mut auth: ResMut<AuthStore>,
-    mut lobby: ResMut<LobbyStore>,
     mut game: ResMut<GameState>,
     client: Res<AuthClient>,
+    network: Res<NetworkClient>,
     buttons: Query<(&Interaction, &ActionButton), (Changed<Interaction>, With<Button>)>,
 ) {
     for (interaction, button) in &buttons {
@@ -765,10 +765,16 @@ fn screen_button_system(
                 std::process::exit(0);
             }
             Action::LobbyCreate => {
-                create_room(&mut state, &mut auth, &mut lobby);
+                let mode = match state.active_lobby_mode { LobbyMode::Online => "online", _ => "multiplayer" }.to_string();
+                send_lobby_command(&mut state, &auth, &network, crate::network::protocol::ClientMessage::LobbyCreate { mode });
             }
             Action::LobbyJoin => {
-                join_room(&mut state, &mut auth, &mut lobby);
+                let code = state.room_code.trim().to_string();
+                if code.is_empty() {
+                    state.lobby_message = String::from("Enter a room code.");
+                } else {
+                    send_lobby_command(&mut state, &auth, &network, crate::network::protocol::ClientMessage::LobbyJoin { code });
+                }
             }
             Action::LobbyBack => {
                 state.screen = Screen::Intro;
@@ -777,27 +783,10 @@ fn screen_button_system(
                 game.paused = true;
             }
             Action::LobbyStart => {
-                if let Some(room_id) = state.current_room.clone() {
-                    let Some(user) = auth.current_user.as_ref() else {
-                        state.lobby_message = String::from("Login first.");
-                        continue;
-                    };
-                    if let Some(room) = lobby.rooms.iter_mut().find(|r| r.id == room_id) {
-                        if !room.host.eq_ignore_ascii_case(&user.nickname) {
-                            state.lobby_message = String::from("Only the host can start the room.");
-                            continue;
-                        }
-                        room.started = true;
-                        state.screen = Screen::Game;
-                        state.message = format!("Room {} started with {} players.", room.id, room.players.len());
-                        game.paused = false;
-                    }
-                } else {
-                    state.lobby_message = String::from("Join or create a room first.");
-                }
+                send_lobby_command(&mut state, &auth, &network, crate::network::protocol::ClientMessage::LobbyStart);
             }
             Action::LobbyLeave => {
-                leave_room(&mut state, &mut auth, &mut lobby);
+                send_lobby_command(&mut state, &auth, &network, crate::network::protocol::ClientMessage::LobbyLeave);
                 state.screen = Screen::Intro;
                 state.active_field = None;
                 game.paused = true;
@@ -817,95 +806,29 @@ fn screen_button_system(
     }
 }
 
-fn create_room(state: &mut FrontendState, auth: &mut AuthStore, lobby: &mut LobbyStore) {
-    let Some(user) = auth.current_user.as_ref() else {
+fn send_lobby_command(
+    state: &mut FrontendState,
+    auth: &AuthStore,
+    network: &NetworkClient,
+    message: crate::network::protocol::ClientMessage,
+) {
+    if auth.current_user.is_none() {
         state.lobby_message = String::from("Login first.");
         return;
-    };
-
-    if lobby
-        .rooms
-        .iter()
-        .any(|room| room.players.iter().any(|player| player.eq_ignore_ascii_case(&user.nickname)))
-    {
-        state.lobby_message = String::from("You are already in a room.");
+    }
+    if !network.connected {
+        state.lobby_message = String::from("Connecting to game server...");
         return;
     }
-
-    lobby.next_room += 1;
-    let id = format!("RM{:04}", lobby.next_room);
-    let room = Room {
-        id: id.clone(),
-        host: user.nickname.clone(),
-        mode: state.active_lobby_mode,
-        max_players: 5,
-        players: vec![user.nickname.clone()],
-        started: false,
-    };
-    lobby.rooms.push(room);
-    state.current_room = Some(id.clone());
-    state.room_code = id.clone();
-    state.lobby_message = format!("Room {} created.", id);
-}
-
-fn join_room(state: &mut FrontendState, auth: &mut AuthStore, lobby: &mut LobbyStore) {
-    let Some(user) = auth.current_user.as_ref() else {
-        state.lobby_message = String::from("Login first.");
+    let Some(sender) = network.sender.as_ref() else {
+        state.lobby_message = String::from("Network channel is unavailable.");
         return;
     };
-
-    let code = state.room_code.trim();
-    if code.is_empty() {
-        state.lobby_message = String::from("Enter a room code.");
-        return;
+    if sender.send(message).is_err() {
+        state.lobby_message = String::from("Failed to send lobby command.");
+    } else {
+        state.lobby_message = String::from("Waiting for server...");
     }
-
-    let Some(room) = lobby.rooms.iter_mut().find(|room| room.id.eq_ignore_ascii_case(code)) else {
-        state.lobby_message = String::from("Room not found.");
-        return;
-    };
-
-    if room.players.iter().any(|name| name.eq_ignore_ascii_case(&user.nickname)) {
-        state.current_room = Some(room.id.clone());
-        state.lobby_message = String::from("You are already in this room.");
-        return;
-    }
-
-    if room.players.len() >= room.max_players {
-        state.lobby_message = String::from("Room is full.");
-        return;
-    }
-
-    room.players.push(user.nickname.clone());
-    state.current_room = Some(room.id.clone());
-    state.lobby_message = format!("Joined room {}.", room.id);
-}
-
-fn leave_room(state: &mut FrontendState, auth: &mut AuthStore, lobby: &mut LobbyStore) {
-    let Some(user) = auth.current_user.as_ref() else {
-        state.current_room = None;
-        return;
-    };
-
-    if let Some(room_id) = state.current_room.clone() {
-        if let Some(pos) = lobby.rooms.iter().position(|room| room.id == room_id) {
-            let mut remove_room = false;
-            {
-                let room = &mut lobby.rooms[pos];
-                room.players.retain(|name| !name.eq_ignore_ascii_case(&user.nickname));
-                if room.players.is_empty() {
-                    remove_room = true;
-                } else if room.host.eq_ignore_ascii_case(&user.nickname) {
-                    room.host = room.players[0].clone();
-                }
-            }
-            if remove_room {
-                lobby.rooms.remove(pos);
-            }
-        }
-    }
-    state.current_room = None;
-    state.room_code.clear();
 }
 
 fn mask_or_show(value: &str, secret: bool) -> String {

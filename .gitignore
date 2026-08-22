@@ -1,0 +1,11 @@
+# Rust
+/game_client/target/
+
+# Gleam build output
+/build/
+
+# Local/editor files
+.env
+.vscode/
+.idea/
+*.log

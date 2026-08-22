@@ -9,7 +9,6 @@
                gleam@otp@port,
                gleam@otp@static_supervisor,
                gleam@otp@supervision,
-               gleam@otp@system,
-               gleam_otp_external]},
+               gleam@otp@system]},
     {registered, []}
 ]}.

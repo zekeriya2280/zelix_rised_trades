@@ -33,9 +33,13 @@ fn handle_ws(state: WsState, message: mist.WebsocketMessage(Nil), connection: mi
   case message {
     mist.Text(text) -> {
       case messages.decode_client(text) {
-        Ok(messages.Join(name, token)) -> handle_join(state, connection, name, token)
-        Ok(messages.Ping) -> send_and_continue(state, connection, messages.Pong)
+        Ok(messages.Join(token)) -> handle_join(state, connection, token)
+        Ok(messages.Ping) -> handle_ping(state, connection)
         Ok(messages.RequestSnapshot) -> handle_snapshot(state, connection)
+        Ok(messages.LobbyCreate(mode)) -> handle_lobby_create(state, connection, mode)
+        Ok(messages.LobbyJoin(code)) -> handle_lobby_join(state, connection, code)
+        Ok(messages.LobbyStart) -> handle_lobby_start(state, connection)
+        Ok(messages.LobbyLeave) -> handle_lobby_leave(state, connection)
         Ok(messages.BuildBank(x, y)) -> handle_build_bank(state, connection, x, y)
         Ok(messages.BuildStructure(building, x, y)) -> handle_build_structure(state, connection, building, x, y)
         Ok(messages.SpawnVehicle(x, y, tx, ty, speed)) -> handle_spawn_vehicle(state, connection, x, y, tx, ty, speed)
@@ -48,24 +52,23 @@ fn handle_ws(state: WsState, message: mist.WebsocketMessage(Nil), connection: mi
   }
 }
 
-fn handle_join(state: WsState, connection: mist.WebsocketConnection, name: String, token: String) -> mist.Next(WsState, Nil) {
+fn handle_join(state: WsState, connection: mist.WebsocketConnection, token: String) -> mist.Next(WsState, Nil) {
   case state.player_id {
     option.Some(_) -> send_and_continue(state, connection, messages.ServerError("Already authenticated."))
     option.None -> case token == "" {
       True -> send_and_continue(state, connection, messages.ServerError("Authentication required."))
-      False -> case auth.verify_token(token) {
+      False -> case auth.verify_identity(token) {
         Error(_) -> send_and_continue(state, connection, messages.ServerError("Invalid authentication token."))
-        Ok(uid) -> {
+        Ok(#(uid, nickname)) -> {
           let reply = process.new_subject()
-          process.send(state.world, game_server.JoinPlayer(uid, name, reply))
+          process.send(state.world, game_server.JoinPlayer(uid, nickname, reply))
           case process.receive(reply, within: 1000) {
             Ok(Ok(player_id)) -> {
               let new_state = WsState(state.world, option.Some(player_id))
+              let _ = ignore_send(connection, messages.Welcome(player_id))
+              let _ = send_lobby_for(new_state, connection)
               case send_snapshot_for(new_state, connection) {
-                Ok(_) -> {
-                  let _ = ignore_send(connection, messages.Welcome(player_id))
-                  mist.continue(new_state)
-                }
+                Ok(_) -> mist.continue(new_state)
                 Error(message) -> send_and_continue(new_state, connection, messages.ServerError(message))
               }
             }
@@ -73,6 +76,86 @@ fn handle_join(state: WsState, connection: mist.WebsocketConnection, name: Strin
             Error(Nil) -> send_and_continue(state, connection, messages.ServerError("World timeout."))
           }
         }
+      }
+    }
+  }
+}
+
+fn handle_ping(state: WsState, connection: mist.WebsocketConnection) -> mist.Next(WsState, Nil) {
+  let _ = ignore_send(connection, messages.Pong)
+  let _ = send_lobby_for(state, connection)
+  mist.continue(state)
+}
+
+fn handle_lobby_create(state: WsState, connection: mist.WebsocketConnection, mode: String) -> mist.Next(WsState, Nil) {
+  case state.player_id {
+    option.None -> send_and_continue(state, connection, messages.ServerError("Authentication required."))
+    option.Some(player_id) -> {
+      let reply = process.new_subject()
+      process.send(state.world, game_server.CreateRoom(player_id, mode, reply))
+      case process.receive(reply, within: 1000) {
+        Ok(Ok(_)) -> {
+          let _ = send_lobby_for(state, connection)
+          mist.continue(state)
+        }
+        Ok(Error(message)) -> send_and_continue(state, connection, messages.CommandRejected(message))
+        Error(Nil) -> send_and_continue(state, connection, messages.ServerError("Lobby timeout."))
+      }
+    }
+  }
+}
+
+fn handle_lobby_join(state: WsState, connection: mist.WebsocketConnection, code: String) -> mist.Next(WsState, Nil) {
+  case state.player_id {
+    option.None -> send_and_continue(state, connection, messages.ServerError("Authentication required."))
+    option.Some(player_id) -> {
+      let reply = process.new_subject()
+      process.send(state.world, game_server.JoinRoom(player_id, code, reply))
+      case process.receive(reply, within: 1000) {
+        Ok(Ok(_)) -> {
+          let _ = send_lobby_for(state, connection)
+          mist.continue(state)
+        }
+        Ok(Error(message)) -> send_and_continue(state, connection, messages.CommandRejected(message))
+        Error(Nil) -> send_and_continue(state, connection, messages.ServerError("Lobby timeout."))
+      }
+    }
+  }
+}
+
+fn handle_lobby_start(state: WsState, connection: mist.WebsocketConnection) -> mist.Next(WsState, Nil) {
+  case state.player_id {
+    option.None -> send_and_continue(state, connection, messages.ServerError("Authentication required."))
+    option.Some(player_id) -> {
+      let reply = process.new_subject()
+      process.send(state.world, game_server.StartRoom(player_id, reply))
+      case process.receive(reply, within: 1000) {
+        Ok(Ok(Nil)) -> {
+          let _ = send_lobby_for(state, connection)
+          let _ = send_snapshot_for(state, connection)
+          mist.continue(state)
+        }
+        Ok(Error(message)) -> send_and_continue(state, connection, messages.CommandRejected(message))
+        Error(Nil) -> send_and_continue(state, connection, messages.ServerError("Lobby timeout."))
+      }
+    }
+  }
+}
+
+fn handle_lobby_leave(state: WsState, connection: mist.WebsocketConnection) -> mist.Next(WsState, Nil) {
+  case state.player_id {
+    option.None -> send_and_continue(state, connection, messages.ServerError("Authentication required."))
+    option.Some(player_id) -> {
+      let reply = process.new_subject()
+      process.send(state.world, game_server.LeaveRoom(player_id, reply))
+      case process.receive(reply, within: 1000) {
+        Ok(Ok(Nil)) -> {
+          let _ = send_lobby_for(state, connection)
+          let _ = send_snapshot_for(state, connection)
+          mist.continue(state)
+        }
+        Ok(Error(message)) -> send_and_continue(state, connection, messages.CommandRejected(message))
+        Error(Nil) -> send_and_continue(state, connection, messages.ServerError("Lobby timeout."))
       }
     }
   }
@@ -137,6 +220,21 @@ fn send_command_result(state: WsState, connection: mist.WebsocketConnection, rep
     Ok(Ok(Nil)) -> handle_snapshot(state, connection)
     Ok(Error(message)) -> send_and_continue(state, connection, messages.CommandRejected(message))
     Error(Nil) -> send_and_continue(state, connection, messages.ServerError("World timeout."))
+  }
+}
+
+fn send_lobby_for(state: WsState, connection: mist.WebsocketConnection) -> Result(Nil, String) {
+  case state.player_id {
+    option.None -> Error("Authentication required.")
+    option.Some(player_id) -> {
+      let reply = process.new_subject()
+      process.send(state.world, game_server.GetLobby(player_id, reply))
+      case process.receive(reply, within: 1000) {
+        Ok(Ok(data)) -> case mist.send_text_frame(connection, data) { Ok(Nil) -> Ok(Nil) Error(_) -> Error("Failed to send lobby state.") }
+        Ok(Error(message)) -> Error(message)
+        Error(Nil) -> Error("Lobby timeout.")
+      }
+    }
   }
 }
 

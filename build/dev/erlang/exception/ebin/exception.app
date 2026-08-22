@@ -2,7 +2,6 @@
     {vsn, "2.1.1"},
     {applications, [gleam_stdlib]},
     {description, "A tiny package for dealing with exceptions"},
-    {modules, [exception,
-               exception_ffi]},
+    {modules, [exception]},
     {registered, []}
 ]}.

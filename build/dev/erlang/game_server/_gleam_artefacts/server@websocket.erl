@@ -9,7 +9,7 @@ start(World) ->
         _pipe = mist:new(fun(Request) ->
             server@router:handle(Request, World)
         end),
-        _pipe@1 = mist:bind(_pipe, ~"127.0.0.1"),
+        _pipe@1 = mist:bind(_pipe, ~"0.0.0.0"),
         mist:port(_pipe@1, 8765)
     end,
     mist:start(Builder).

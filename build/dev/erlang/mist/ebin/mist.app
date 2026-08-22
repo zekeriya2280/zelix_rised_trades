@@ -25,7 +25,6 @@
                mist@internal@http2@stream,
                mist@internal@http@handler,
                mist@internal@next,
-               mist@internal@websocket,
-               mist_ffi]},
+               mist@internal@websocket]},
     {registered, []}
 ]}.

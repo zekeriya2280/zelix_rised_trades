@@ -10,6 +10,8 @@ pub struct GameState {
     pub paused: bool,
     /// Last authoritative server tick received in online mode.
     pub server_tick: u64,
+    pub storage_used: u32,
+    pub storage_capacity: u32,
 }
 
 impl Default for GameState {
@@ -19,6 +21,8 @@ impl Default for GameState {
             world_time: 0.0,
             paused: true,
             server_tick: 0,
+            storage_used: 0,
+            storage_capacity: 0,
         }
     }
 }

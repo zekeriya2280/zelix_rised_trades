@@ -8,7 +8,6 @@
     {modules, [gramps@debug,
                gramps@http,
                gramps@websocket,
-               gramps@websocket@compression,
-               gramps_ffi]},
+               gramps@websocket@compression]},
     {registered, []}
 ]}.

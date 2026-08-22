@@ -1,13 +1,13 @@
 -module(server@auth).
 -compile([no_auto_import, nowarn_ignored, nowarn_unused_vars, nowarn_unused_function, nowarn_nomatch, inline]).
--export([verify_token/1, handle/2]).
+-export([verify_identity/1, verify_token/1, handle/2]).
 -export_type([auth_result/0, credentials/0]).
 
 -type auth_result() :: {auth_result, boolean(), binary(), binary(), binary()}.
 
 -type credentials() :: {credentials, binary(), binary(), gleam@option:option(binary())}.
 
--file("src\\server\\auth.gleam", 132).
+-file("src\\server\\auth.gleam", 146).
 -spec extract_optional(binary(), binary()) -> gleam@option:option(binary()).
 extract_optional(Text, Field) ->
     case gleam@json:parse(Text, begin
@@ -22,13 +22,13 @@ extract_optional(Text, Field) ->
             none
     end.
 
--file("src\\server\\auth.gleam", 60).
+-file("src\\server\\auth.gleam", 74).
 -spec api_key() -> binary().
 api_key() ->
     _pipe = game_server_os_ffi:get_env(~"FIREBASE_WEB_API_KEY"),
     gleam@result:unwrap(_pipe, ~"").
 
--file("src\\server\\auth.gleam", 105).
+-file("src\\server\\auth.gleam", 119).
 -spec firebase_post(binary(), binary()) -> {ok, binary()} | {error, binary()}.
 firebase_post(Path, Body) ->
     Url = <<<<<<"https://identitytoolkit.googleapis.com/v1"/utf8, Path/binary>>/binary, "?key="/utf8>>/binary, (api_key())/binary>>,
@@ -61,18 +61,18 @@ firebase_post(Path, Body) ->
                 file => ~"src\\server\\auth.gleam",
                 module => ~"server/auth",
                 function => ~"firebase_post",
-                line => 107,
+                line => 121,
                 value => _value,
-                start => 4015,
-                'end' => 4051,
-                pattern_start => 4026,
-                pattern_end => 4033
+                start => 4593,
+                'end' => 4629,
+                pattern_start => 4604,
+                pattern_end => 4611
             })
     end.
 
 -file("src\\server\\auth.gleam", 17).
--spec verify_token(binary()) -> {ok, binary()} | {error, binary()}.
-verify_token(Token) ->
+-spec verify_identity(binary()) -> {ok, {binary(), binary()}} | {error, binary()}.
+verify_identity(Token) ->
     case api_key() of
         ~"" ->
             {error, ~"FIREBASE_WEB_API_KEY is not configured on the server."};
@@ -84,9 +84,22 @@ verify_token(Token) ->
             end,
             case firebase_post(~"/accounts:lookup", Body) of
                 {ok, Text} ->
-                    case extract_optional(Text, ~"localId") of
-                        {some, Uid} ->
-                            {ok, Uid};
+                    Uid = extract_optional(Text, ~"localId"),
+                    Nickname = extract_optional(Text, ~"displayName"),
+                    case Uid of
+                        {some, Id} ->
+                            Name = begin
+                                _pipe@1 = Nickname,
+                                _pipe@2 = gleam@option:unwrap(_pipe@1, ~""),
+                                gleam@string:trim(_pipe@2)
+                            end,
+                            case (string:length(Name) >= 3) andalso (string:length(Name) =< 24) of
+                                true ->
+                                    {ok, {Id, Name}};
+
+                                false ->
+                                    {error, ~"Firebase account does not have a valid nickname."}
+                            end;
 
                         none ->
                             {error, ~"Firebase token did not contain a user id."}
@@ -97,18 +110,29 @@ verify_token(Token) ->
             end
     end.
 
--file("src\\server\\auth.gleam", 155).
+-file("src\\server\\auth.gleam", 43).
+-spec verify_token(binary()) -> {ok, binary()} | {error, binary()}.
+verify_token(Token) ->
+    case verify_identity(Token) of
+        {ok, {Uid, _}} ->
+            {ok, Uid};
+
+        {error, Message} ->
+            {error, Message}
+    end.
+
+-file("src\\server\\auth.gleam", 169).
 -spec failed(binary()) -> auth_result().
 failed(Message) ->
     {auth_result, false, Message, ~"", ~""}.
 
--file("src\\server\\auth.gleam", 131).
+-file("src\\server\\auth.gleam", 145).
 -spec extract(binary(), binary()) -> binary().
 extract(Text, Field) ->
     _pipe = extract_optional(Text, Field),
     gleam@option:unwrap(_pipe, ~"").
 
--file("src\\server\\auth.gleam", 81).
+-file("src\\server\\auth.gleam", 95).
 -spec register(binary(), binary(), binary()) -> auth_result().
 register(Email, Password, Nickname) ->
     case api_key() of
@@ -146,7 +170,7 @@ register(Email, Password, Nickname) ->
             end
     end.
 
--file("src\\server\\auth.gleam", 142).
+-file("src\\server\\auth.gleam", 156).
 -spec valid_register_input(binary(), binary(), binary()) -> {ok, nil} | {error, binary()}.
 valid_register_input(Email, Password, Nickname) ->
     case string:length(gleam@string:trim(Email)) >= 3 of
@@ -169,7 +193,7 @@ valid_register_input(Email, Password, Nickname) ->
             end
     end.
 
--file("src\\server\\auth.gleam", 62).
+-file("src\\server\\auth.gleam", 76).
 -spec login(binary(), binary()) -> auth_result().
 login(Email, Password) ->
     case api_key() of
@@ -195,7 +219,7 @@ login(Email, Password) ->
             end
     end.
 
--file("src\\server\\auth.gleam", 118).
+-file("src\\server\\auth.gleam", 132).
 -spec decode_credentials(binary()) -> {ok, credentials()} | {error, binary()}.
 decode_credentials(Text) ->
     Decoder = begin
@@ -215,7 +239,7 @@ decode_credentials(Text) ->
             {error, ~"Invalid auth request."}
     end.
 
--file("src\\server\\auth.gleam", 35).
+-file("src\\server\\auth.gleam", 49).
 -spec handle(binary(), bitstring()) -> auth_result().
 handle(Path, Body) ->
     case gleam@bit_array:to_string(Body) of

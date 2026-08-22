@@ -5,9 +5,13 @@ use crate::core::events::{BuildingType, ProductType};
 #[derive(Serialize, Deserialize, Clone, Debug)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum ClientMessage {
-    Join { name: String, token: String },
+    Join { token: String },
     Ping,
     RequestSnapshot,
+    LobbyCreate { mode: String },
+    LobbyJoin { code: String },
+    LobbyStart,
+    LobbyLeave,
     BuildBank { x: f32, y: f32 },
     BuildStructure { building_type: BuildingType, x: f32, y: f32 },
     SpawnVehicle { x: f32, y: f32, target_x: f32, target_y: f32, speed: f32 },
@@ -19,6 +23,15 @@ pub enum ClientMessage {
 pub enum ServerMessage {
     Welcome { player_id: u64 },
     Pong,
+    LobbyState {
+        room_id: Option<String>,
+        is_host: bool,
+        started: bool,
+        mode: String,
+        host_name: String,
+        players: Vec<String>,
+        max_players: u32,
+    },
     WorldSnapshot { data: WorldSnapshot },
     CommandRejected { message: String },
     Error { message: String },
@@ -29,12 +42,25 @@ pub enum ServerMessage {
 pub struct WorldSnapshot {
     pub tick: u64,
     pub money: i64,
+    pub inventory: InventoryState,
+    pub storage_used: u32,
+    pub storage_capacity: u32,
+    pub in_game: bool,
     pub banks: Vec<BankState>,
     pub factories: Vec<FactoryState>,
     pub warehouses: Vec<WarehouseState>,
     pub gatherers: Vec<SimpleBuildingState>,
     pub farms: Vec<SimpleBuildingState>,
     pub vehicles: Vec<VehicleState>,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug, Default)]
+pub struct InventoryState {
+    pub wood: u32,
+    pub stone: u32,
+    pub iron: u32,
+    pub gold: u32,
+    pub grain: u32,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
@@ -69,18 +95,30 @@ mod tests {
     }
 
     #[test]
-    fn snapshot_envelope_round_trips() {
-        let message = ServerMessage::WorldSnapshot { data: WorldSnapshot::default() };
+    fn lobby_messages_round_trip() {
+        let message = ServerMessage::LobbyState {
+            room_id: Some("RM0001".into()),
+            is_host: true,
+            started: false,
+            mode: "multiplayer".into(),
+            host_name: "A".into(),
+            players: vec!["A".into(), "B".into()],
+            max_players: 5,
+        };
         let json = serde_json::to_string(&message).unwrap();
         let decoded: ServerMessage = serde_json::from_str(&json).unwrap();
-        assert!(matches!(decoded, ServerMessage::WorldSnapshot { data } if data.tick == 0));
+        assert!(matches!(decoded, ServerMessage::LobbyState { room_id: Some(id), players, .. } if id == "RM0001" && players.len() == 2));
     }
 
     #[test]
-    fn disconnect_message_round_trips() {
-        let message = ServerMessage::CommandRejected { message: "rejected".into() };
+    fn snapshot_inventory_round_trips() {
+        let mut snapshot = WorldSnapshot::default();
+        snapshot.money = 42;
+        snapshot.inventory.gold = 12;
+        snapshot.storage_capacity = 1000;
+        let message = ServerMessage::WorldSnapshot { data: snapshot };
         let json = serde_json::to_string(&message).unwrap();
         let decoded: ServerMessage = serde_json::from_str(&json).unwrap();
-        assert!(matches!(decoded, ServerMessage::CommandRejected { message } if message == "rejected"));
+        assert!(matches!(decoded, ServerMessage::WorldSnapshot { data } if data.money == 42 && data.inventory.gold == 12));
     }
 }

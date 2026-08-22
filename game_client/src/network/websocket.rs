@@ -6,9 +6,9 @@ use tokio_tungstenite::{connect_async, tungstenite::Message};
 
 use super::auth::server_base;
 use super::protocol::{ClientMessage, ServerMessage, WorldSnapshot};
+use crate::frontend::{AuthStore, LobbyMode, LobbyStore, Room, FrontendState, Screen};
 use crate::core::events::{BuildBankEvent, BuildStructureEvent, SetFactoryProductEvent};
 use crate::core::{Bank, CityRadius, Factory, Farm, Gatherer, OwnerId, PathFollower, ServerId, Vehicle, Warehouse};
-use crate::frontend::AuthStore;
 
 #[derive(Resource, Default)]
 pub struct NetworkClient {
@@ -45,7 +45,6 @@ pub fn websocket_connect_system(
     client.connecting = true;
     client.last_error = None;
     let url = websocket_url();
-    let user_name = user.nickname.clone();
     let token = user.token.clone();
     let (tx_out, rx_out) = unbounded::<ClientMessage>();
     let (tx_in, rx_in) = unbounded::<ServerMessage>();
@@ -63,7 +62,7 @@ pub fn websocket_connect_system(
                 return;
             };
             let (mut write, mut read) = socket.split();
-            let join = ClientMessage::Join { name: user_name, token };
+            let join = ClientMessage::Join { token };
             let Ok(text) = serde_json::to_string(&join) else { return; };
             if write.send(Message::Text(text.into())).await.is_err() {
                 let _ = tx_in.send(ServerMessage::Disconnected { message: "WebSocket join failed".into() });
@@ -114,6 +113,9 @@ pub fn websocket_receive_system(
     mut authority: ResMut<OnlineAuthority>,
     mut pending: ResMut<PendingSnapshot>,
     mut game: ResMut<crate::core::GameState>,
+    mut inventory: ResMut<crate::core::MaterialInventory>,
+    mut lobby: ResMut<LobbyStore>,
+    mut frontend: ResMut<FrontendState>,
 ) {
     let Some(receiver) = client.receiver.take() else { return; };
     while let Ok(message) = receiver.try_recv() {
@@ -123,17 +125,64 @@ pub fn websocket_receive_system(
                 client.connected = true;
                 client.connecting = false;
                 client.retry_in = 0.0;
-                authority.active = true;
+                authority.active = false;
+            }
+            ServerMessage::LobbyState { room_id, is_host: _is_host, started, mode, host_name, players, max_players } => {
+                lobby.rooms.clear();
+                if let Some(id) = room_id.clone() {
+                    let lobby_mode = if mode.eq_ignore_ascii_case("online") { LobbyMode::Online } else { LobbyMode::Multiplayer };
+                    let host = host_name;
+                    lobby.rooms.push(Room {
+                        id: id.clone(),
+                        host,
+                        mode: lobby_mode,
+                        max_players: max_players as usize,
+                        players: players.clone(),
+                        started,
+                    });
+                    frontend.current_room = Some(id.clone());
+                    frontend.room_code = id;
+                    if started {
+                        frontend.screen = Screen::Game;
+                        frontend.message = format!("Room started with {} players.", players.len());
+                        game.paused = false;
+                    } else if frontend.screen == Screen::Game {
+                        frontend.screen = Screen::Lobby;
+                        game.paused = true;
+                    }
+                    frontend.lobby_message = format!("Room: {} | {}/{} players", frontend.room_code, players.len(), max_players);
+                } else {
+                    frontend.current_room = None;
+                    if frontend.screen == Screen::Game {
+                        frontend.screen = Screen::Intro;
+                        game.paused = true;
+                    }
+                }
             }
             ServerMessage::WorldSnapshot { data } => {
                 client.connected = true;
                 client.connecting = false;
                 client.retry_in = 0.0;
-                authority.active = true;
+                authority.active = data.in_game;
                 game.money = data.money;
                 game.world_time = data.tick as f64;
                 game.server_tick = data.tick;
-                pending.0 = Some(data);
+                game.storage_used = data.storage_used;
+                game.storage_capacity = data.storage_capacity;
+                inventory.counts.insert(crate::core::events::ProductType::Wood, data.inventory.wood);
+                inventory.counts.insert(crate::core::events::ProductType::Stone, data.inventory.stone);
+                inventory.counts.insert(crate::core::events::ProductType::Iron, data.inventory.iron);
+                inventory.counts.insert(crate::core::events::ProductType::Gold, data.inventory.gold);
+                inventory.counts.insert(crate::core::events::ProductType::Grain, data.inventory.grain);
+                if !data.in_game && frontend.screen == Screen::Game {
+                    frontend.screen = Screen::Lobby;
+                    game.paused = true;
+                }
+                if data.in_game {
+                    pending.0 = Some(data);
+                } else {
+                    pending.0 = None;
+                }
             }
             ServerMessage::Pong => {}
             ServerMessage::CommandRejected { message } => {

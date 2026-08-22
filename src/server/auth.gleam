@@ -14,20 +14,34 @@ const identity_endpoint = "https://identitytoolkit.googleapis.com/v1"
 pub type AuthResult { AuthResult(ok: Bool, message: String, nickname: String, token: String) }
 
 
-pub fn verify_token(token: String) -> Result(String, String) {
+pub fn verify_identity(token: String) -> Result(#(String, String), String) {
   case api_key() {
     "" -> Error("FIREBASE_WEB_API_KEY is not configured on the server.")
     _ -> {
       let body = json.object([#("idToken", json.string(token))]) |> json.to_string
       case firebase_post("/accounts:lookup", body) {
-        Ok(text) -> case extract_optional(text, "localId") {
-          option.Some(uid) -> Ok(uid)
-          option.None -> Error("Firebase token did not contain a user id.")
+        Ok(text) -> {
+          let uid = extract_optional(text, "localId")
+          let nickname = extract_optional(text, "displayName")
+          case uid {
+            option.Some(id) -> {
+              let name = nickname |> option.unwrap("") |> string.trim
+              case string.length(name) >= 3 && string.length(name) <= 24 {
+                True -> Ok(#(id, name))
+                False -> Error("Firebase account does not have a valid nickname.")
+              }
+            }
+            option.None -> Error("Firebase token did not contain a user id.")
+          }
         }
         Error(message) -> Error(message)
       }
     }
   }
+}
+
+pub fn verify_token(token: String) -> Result(String, String) {
+  case verify_identity(token) { Ok(#(uid, _)) -> Ok(uid) Error(message) -> Error(message) }
 }
 
 type Credentials { Credentials(email: String, password: String, nickname: option.Option(String)) }

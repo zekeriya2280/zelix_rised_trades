@@ -1,13 +1,18 @@
 import gleam/dynamic/decode
 import gleam/json
+import gleam/option
 
 pub type BuildingType { Gatherer Factory Warehouse Farm }
 pub type ProductType { Wood Stone Iron Gold Grain }
 
 pub type ClientMessage {
-  Join(name: String, token: String)
+  Join(token: String)
   Ping
   RequestSnapshot
+  LobbyCreate(mode: String)
+  LobbyJoin(code: String)
+  LobbyStart
+  LobbyLeave
   BuildBank(x: Float, y: Float)
   BuildStructure(building: BuildingType, x: Float, y: Float)
   SpawnVehicle(x: Float, y: Float, target_x: Float, target_y: Float, speed: Float)
@@ -17,6 +22,7 @@ pub type ClientMessage {
 pub type ServerMessage {
   Welcome(player_id: Int)
   Pong
+  LobbyState(room_id: option.Option(String), is_host: Bool, started: Bool, mode: String, host_name: String, players: List(String), max_players: Int)
   WorldSnapshot(data: String)
   ServerError(message: String)
   CommandRejected(message: String)
@@ -34,14 +40,40 @@ pub fn product_json(product: ProductType) -> json.Json {
   case product { Wood -> json.string("wood") Stone -> json.string("stone") Iron -> json.string("iron") Gold -> json.string("gold") Grain -> json.string("grain") }
 }
 
+pub fn product_from_string(value: String) -> Result(ProductType, String) {
+  case value {
+    "wood" -> Ok(Wood)
+    "stone" -> Ok(Stone)
+    "iron" -> Ok(Iron)
+    "gold" -> Ok(Gold)
+    "grain" -> Ok(Grain)
+    _ -> Error("Unknown product")
+  }
+}
+
 pub fn encode_server(message: ServerMessage) -> String {
   case message {
     Welcome(player_id:) -> json.object([#("type", json.string("welcome")), #("player_id", json.int(player_id))]) |> json.to_string
     Pong -> json.object([#("type", json.string("pong"))]) |> json.to_string
+    LobbyState(room_id:, is_host:, started:, mode:, host_name:, players:, max_players:) ->
+      json.object([
+        #("type", json.string("lobby_state")),
+        #("room_id", option_json_string(room_id)),
+        #("is_host", json.bool(is_host)),
+        #("started", json.bool(started)),
+        #("mode", json.string(mode)),
+        #("host_name", json.string(host_name)),
+        #("players", json.array(players, json.string)),
+        #("max_players", json.int(max_players)),
+      ]) |> json.to_string
     WorldSnapshot(data:) -> data
     ServerError(message:) -> json.object([#("type", json.string("error")), #("message", json.string(message))]) |> json.to_string
     CommandRejected(message:) -> json.object([#("type", json.string("command_rejected")), #("message", json.string(message))]) |> json.to_string
   }
+}
+
+fn option_json_string(value: option.Option(String)) -> json.Json {
+  case value { option.None -> json.null() option.Some(text) -> json.string(text) }
 }
 
 pub fn decode_client(text: String) -> Result(ClientMessage, String) {
@@ -49,12 +81,21 @@ pub fn decode_client(text: String) -> Result(ClientMessage, String) {
     use tag <- decode.field("type", decode.string)
     case tag {
       "join" -> {
-        use name <- decode.field("name", decode.string)
         use token <- decode.field("token", decode.string)
-        decode.success(Join(name, token))
+        decode.success(Join(token))
       }
       "ping" -> decode.success(Ping)
       "request_snapshot" -> decode.success(RequestSnapshot)
+      "lobby_create" -> {
+        use mode <- decode.field("mode", decode.string)
+        decode.success(LobbyCreate(mode))
+      }
+      "lobby_join" -> {
+        use code <- decode.field("code", decode.string)
+        decode.success(LobbyJoin(code))
+      }
+      "lobby_start" -> decode.success(LobbyStart)
+      "lobby_leave" -> decode.success(LobbyLeave)
       "build_bank" -> {
         use x <- decode.field("x", decode.float)
         use y <- decode.field("y", decode.float)
@@ -99,13 +140,9 @@ fn decode_building() -> decode.Decoder(BuildingType) {
 
 fn decode_product() -> decode.Decoder(ProductType) {
   decode.then(decode.string, fn(text) {
-    case text {
-      "wood" -> decode.success(Wood)
-      "stone" -> decode.success(Stone)
-      "iron" -> decode.success(Iron)
-      "gold" -> decode.success(Gold)
-      "grain" -> decode.success(Grain)
-      _ -> decode.failure(Wood, expected: "product")
+    case product_from_string(text) {
+      Ok(product) -> decode.success(product)
+      Error(_) -> decode.failure(Wood, expected: "product")
     }
   })
 }

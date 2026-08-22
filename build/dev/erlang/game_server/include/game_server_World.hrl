@@ -9,5 +9,7 @@
     gatherers :: list(game_server:simple_building()),
     farms :: list(game_server:simple_building()),
     vehicles :: list(game_server:vehicle()),
-    online_players :: list(integer())
+    online_players :: list(integer()),
+    rooms :: list(game_server:room()),
+    next_room_id :: integer()
 }).

@@ -9,12 +9,28 @@ import server/messages
 
 pub type Position { Position(x: Float, y: Float) }
 
-pub type Player { Player(id: Int, auth_uid: String, name: String, money: Int) }
+pub type Player {
+  Player(
+    id: Int,
+    auth_uid: String,
+    name: String,
+    money: Int,
+    wood: Int,
+    stone: Int,
+    iron: Int,
+    gold: Int,
+    grain: Int,
+  )
+}
 pub type Bank { Bank(id: Int, owner_id: Int, position: Position) }
 pub type Factory { Factory(id: Int, owner_id: Int, position: Position, level: Int, product: messages.ProductType) }
 pub type Warehouse { Warehouse(id: Int, owner_id: Int, position: Position, capacity: Int) }
 pub type SimpleBuilding { SimpleBuilding(id: Int, owner_id: Int, position: Position) }
 pub type Vehicle { Vehicle(id: Int, owner_id: Int, position: Position, target: Position, speed: Float) }
+
+pub type Room {
+  Room(id: String, host_id: Int, mode: String, players: List(Int), started: Bool)
+}
 
 pub type World {
   World(
@@ -29,6 +45,8 @@ pub type World {
     farms: List(SimpleBuilding),
     vehicles: List(Vehicle),
     online_players: List(Int),
+    rooms: List(Room),
+    next_room_id: Int,
   )
 }
 
@@ -39,6 +57,11 @@ pub type Message {
   BuildStructure(player_id: Int, building: messages.BuildingType, x: Float, y: Float, reply_to: process.Subject(Result(Nil, String)))
   SpawnVehicle(player_id: Int, x: Float, y: Float, target_x: Float, target_y: Float, speed: Float, reply_to: process.Subject(Result(Nil, String)))
   SetFactoryProduct(player_id: Int, factory_id: Int, product: messages.ProductType, reply_to: process.Subject(Result(Nil, String)))
+  CreateRoom(player_id: Int, mode: String, reply_to: process.Subject(Result(String, String)))
+  JoinRoom(player_id: Int, code: String, reply_to: process.Subject(Result(String, String)))
+  StartRoom(player_id: Int, reply_to: process.Subject(Result(Nil, String)))
+  LeaveRoom(player_id: Int, reply_to: process.Subject(Result(Nil, String)))
+  GetLobby(player_id: Int, reply_to: process.Subject(Result(String, String)))
   GetSnapshot(player_id: Int, reply_to: process.Subject(Result(String, String)))
 }
 
@@ -48,6 +71,8 @@ const city_radius = 300.0
 const minimum_distance = 50.0
 const vehicle_speed_max = 500.0
 const world_limit = 1000.0
+const room_max_players = 5
+const production_interval_ticks = 20
 
 @external(erlang, "game_server_os_ffi", "terrain_height")
 fn terrain_height(x: Float, y: Float) -> Float
@@ -63,14 +88,15 @@ pub fn start() -> process.Subject(Message) {
 }
 
 pub fn initial_world() -> World {
-  World(0, 1, 1, [], [], [], [], [], [], [], [])
+  World(0, 1, 1, [], [], [], [], [], [], [], [], [], 1)
 }
 
 fn loop(subject: process.Subject(Message), world: World) -> Nil {
-  case process.receive(subject, within: 1000) {
-    Ok(message) -> loop(subject, handle(message, world))
-    Error(Nil) -> loop(subject, update(world))
+  let next_world = case process.receive(subject, within: 50) {
+    Ok(message) -> handle(message, world)
+    Error(Nil) -> world
   }
+  loop(subject, update(next_world))
 }
 
 fn handle(message: Message, world: World) -> World {
@@ -92,7 +118,10 @@ fn handle(message: Message, world: World) -> World {
                 }
                 False -> {
                   process.send(reply_to, Ok(id))
-                  World(..world, online_players: [id, ..world.online_players])
+                  let players = list.map(world.players, fn(player) {
+                    case player.id == id { True -> Player(..player, name: nickname) False -> player }
+                  })
+                  World(..world, players: players, online_players: [id, ..world.online_players])
                 }
               }
             }
@@ -110,7 +139,7 @@ fn handle(message: Message, world: World) -> World {
                 world
               }
               False -> {
-                let player = Player(world.next_player_id, auth_uid, nickname, starting_money)
+                let player = Player(world.next_player_id, auth_uid, nickname, starting_money, 0, 0, 0, 0, 0)
                 process.send(reply_to, Ok(player.id))
                 World(
                   ..world,
@@ -124,9 +153,7 @@ fn handle(message: Message, world: World) -> World {
         }
       }
     }
-    LeavePlayer(player_id) -> {
-      World(..world, online_players: remove_online(world.online_players, player_id))
-    }
+    LeavePlayer(player_id) -> remove_player_from_session(world, player_id)
     BuildBank(player_id, x, y, reply_to) -> {
       let #(new_world, result) = build_bank(world, player_id, x, y)
       process.send(reply_to, result)
@@ -147,6 +174,33 @@ fn handle(message: Message, world: World) -> World {
       process.send(reply_to, result)
       new_world
     }
+    CreateRoom(player_id, mode, reply_to) -> {
+      let #(new_world, result) = create_room(world, player_id, mode)
+      process.send(reply_to, result)
+      new_world
+    }
+    JoinRoom(player_id, code, reply_to) -> {
+      let #(new_world, result) = join_room(world, player_id, code)
+      process.send(reply_to, result)
+      new_world
+    }
+    StartRoom(player_id, reply_to) -> {
+      let #(new_world, result) = start_room(world, player_id)
+      process.send(reply_to, result)
+      new_world
+    }
+    LeaveRoom(player_id, reply_to) -> {
+      let #(new_world, result) = leave_room(world, player_id)
+      process.send(reply_to, result)
+      new_world
+    }
+    GetLobby(player_id, reply_to) -> {
+      case lobby_json(world, player_id) {
+        Ok(data) -> process.send(reply_to, Ok(data))
+        Error(message) -> process.send(reply_to, Error(message))
+      }
+      world
+    }
     GetSnapshot(player_id, reply_to) -> {
       case snapshot_json(world, player_id) {
         Ok(snapshot) -> process.send(reply_to, Ok(snapshot))
@@ -161,21 +215,28 @@ fn update(world: World) -> World {
   let next_tick = world.tick + 1
   let vehicles = list.map(world.vehicles, move_vehicle)
   let players =
-    case next_tick % 5 == 0 {
-      True -> list.map(world.players, fn(player) { produce_for_player(player, world.factories) })
+    case next_tick % production_interval_ticks == 0 {
+      True -> list.map(world.players, fn(player) { produce_for_player(player, world.factories, world.warehouses) })
       False -> world.players
     }
   World(..world, tick: next_tick, players: players, vehicles: vehicles)
 }
 
-fn produce_for_player(player: Player, factories: List(Factory)) -> Player {
-  let count = list.fold(factories, 0, fn(total, factory) {
-    case factory.owner_id == player.id {
-      True -> total + messages.product_value(factory.product) * factory.level
-      False -> total
-    }
+fn produce_for_player(player: Player, factories: List(Factory), warehouses: List(Warehouse)) -> Player {
+  let capacity = list.fold(warehouses, 0, fn(total, warehouse) {
+    case warehouse.owner_id == player.id { True -> total + warehouse.capacity False -> total }
   })
-  Player(..player, money: player.money + count)
+  let used = inventory_total(player)
+  let room = positive_or_zero(capacity - used)
+  case room == 0 {
+    True -> player
+    False -> list.fold(factories, player, fn(current, factory) {
+      case factory.owner_id == player.id {
+        False -> current
+        True -> add_product_capped(current, factory.product, factory.level, capacity)
+      }
+    })
+  }
 }
 
 fn build_bank(world: World, player_id: Int, x: Float, y: Float) -> #(World, Result(Nil, String)) {
@@ -384,7 +445,9 @@ fn player_exists(world: World, player_id: Int) -> Bool { list.any(world.players,
 
 fn is_online(world: World, player_id: Int) -> Bool { list.any(world.online_players, fn(id) { id == player_id }) }
 
-fn player_authorized(world: World, player_id: Int) -> Bool { player_exists(world, player_id) && is_online(world, player_id) }
+fn session_valid(world: World, player_id: Int) -> Bool { player_exists(world, player_id) && is_online(world, player_id) }
+
+fn player_authorized(world: World, player_id: Int) -> Bool { session_valid(world, player_id) && player_in_started_room(world, player_id) }
 
 fn remove_online(ids: List(Int), player_id: Int) -> List(Int) {
   list.filter(ids, fn(id) { id != player_id })
@@ -392,7 +455,7 @@ fn remove_online(ids: List(Int), player_id: Int) -> List(Int) {
 
 fn nickname_taken(world: World, nickname: String, except_player_id: Int) -> Bool {
   list.any(world.players, fn(player) {
-    player.id != except_player_id && is_online(world, player.id) && string.lowercase(player.name) == string.lowercase(nickname)
+    player.id != except_player_id && string.lowercase(player.name) == string.lowercase(nickname)
   })
 }
 
@@ -434,20 +497,228 @@ fn move_vehicle(vehicle: Vehicle) -> Vehicle {
   let dx = tx -. x
   let dy = ty -. y
   let d = distance(vehicle.position, vehicle.target)
-  case d <=. vehicle.speed || d <=. 0.001 {
+  let step = vehicle.speed *. 0.05
+  case d <=. step || d <=. 0.001 {
     True -> Vehicle(..vehicle, position: vehicle.target)
-    False -> Vehicle(..vehicle, position: Position(x +. dx /. d *. vehicle.speed, y +. dy /. d *. vehicle.speed))
+    False -> Vehicle(..vehicle, position: Position(x +. dx /. d *. step, y +. dy /. d *. step))
   }
 }
 
+fn get_player(players: List(Player), player_id: Int) -> Player {
+  case players {
+    [player, ..rest] -> case player.id == player_id { True -> player False -> get_player(rest, player_id) }
+    [] -> Player(player_id, "", "", 0, 0, 0, 0, 0, 0)
+  }
+}
+
+fn inventory_total(player: Player) -> Int { player.wood + player.stone + player.iron + player.gold + player.grain }
+
+fn positive_or_zero(value: Int) -> Int {
+  case value > 0 { True -> value False -> 0 }
+}
+
+fn add_product_capped(player: Player, product: messages.ProductType, amount: Int, capacity: Int) -> Player {
+  let room = positive_or_zero(capacity - inventory_total(player))
+  let amount = case amount < room { True -> amount False -> room }
+  let updated = add_product(player, product, amount)
+  Player(..updated, money: updated.money + messages.product_value(product) * amount)
+}
+
+fn add_product(player: Player, product: messages.ProductType, amount: Int) -> Player {
+  case product {
+    messages.Wood -> Player(..player, wood: player.wood + amount)
+    messages.Stone -> Player(..player, stone: player.stone + amount)
+    messages.Iron -> Player(..player, iron: player.iron + amount)
+    messages.Gold -> Player(..player, gold: player.gold + amount)
+    messages.Grain -> Player(..player, grain: player.grain + amount)
+  }
+}
+
+fn player_storage_capacity(world: World, player_id: Int) -> Int {
+  list.fold(world.warehouses, 0, fn(total, warehouse) {
+    case warehouse.owner_id == player_id { True -> total + warehouse.capacity False -> total }
+  })
+}
+
+fn inventory_json(player: Player) -> json.Json {
+  json.object([
+    #("wood", json.int(player.wood)),
+    #("stone", json.int(player.stone)),
+    #("iron", json.int(player.iron)),
+    #("gold", json.int(player.gold)),
+    #("grain", json.int(player.grain)),
+  ])
+}
+
+fn player_in_started_room(world: World, player_id: Int) -> Bool {
+  list.any(world.rooms, fn(room) { room.started && list.any(room.players, fn(id) { id == player_id }) })
+}
+
+fn player_room(world: World, player_id: Int) -> option.Option(Room) {
+  list.fold(world.rooms, option.None, fn(found, room) {
+    case found {
+      option.Some(_) -> found
+      option.None -> case list.any(room.players, fn(id) { id == player_id }) { True -> option.Some(room) False -> option.None }
+    }
+  })
+}
+
+fn room_by_id(world: World, code: String) -> option.Option(Room) {
+  let normalized = string.uppercase(string.trim(code))
+  list.fold(world.rooms, option.None, fn(found, room) {
+    case found {
+      option.Some(_) -> found
+      option.None -> case string.uppercase(room.id) == normalized { True -> option.Some(room) False -> option.None }
+    }
+  })
+}
+
+fn create_room(world: World, player_id: Int, mode: String) -> #(World, Result(String, String)) {
+  case session_valid(world, player_id) {
+    False -> #(world, Error("Authentication required."))
+    True -> case player_room(world, player_id) {
+      option.Some(_) -> #(world, Error("You are already in a room."))
+      option.None -> {
+        let code = room_code(world.next_room_id)
+        let room = Room(code, player_id, safe_mode(mode), [player_id], False)
+        #(World(..world, rooms: [room, ..world.rooms], next_room_id: world.next_room_id + 1), Ok(code))
+      }
+    }
+  }
+}
+
+fn join_room(world: World, player_id: Int, code: String) -> #(World, Result(String, String)) {
+  case session_valid(world, player_id) {
+    False -> #(world, Error("Authentication required."))
+    True -> case player_room(world, player_id) {
+      option.Some(existing) -> #(world, Error("You are already in room " <> existing.id <> "."))
+      option.None -> case room_by_id(world, code) {
+        option.None -> #(world, Error("Room not found."))
+        option.Some(room) -> case room.started {
+          True -> #(world, Error("Room has already started."))
+          False -> case list.length(room.players) >= room_max_players {
+            True -> #(world, Error("Room is full."))
+            False -> {
+              let updated = Room(..room, players: [player_id, ..room.players])
+              #(replace_room(world, updated), Ok(room.id))
+            }
+          }
+        }
+      }
+    }
+  }
+}
+
+fn start_room(world: World, player_id: Int) -> #(World, Result(Nil, String)) {
+  case player_room(world, player_id) {
+    option.None -> #(world, Error("You are not in a room."))
+    option.Some(room) -> case room.host_id == player_id {
+      False -> #(world, Error("Only the host can start the room."))
+      True -> case any_started_room_other_than(world, room.id) {
+        True -> #(world, Error("Another game room is already active on this server."))
+        False -> case room.players == [] {
+        True -> #(world, Error("Room is empty."))
+        False -> #(replace_room(world, Room(..room, started: True)), Ok(Nil))
+      }
+    }
+  }
+  }
+}
+
+fn any_started_room_other_than(world: World, room_id: String) -> Bool {
+  list.any(world.rooms, fn(room) { room.id != room_id && room.started })
+}
+
+fn leave_room(world: World, player_id: Int) -> #(World, Result(Nil, String)) {
+  case player_room(world, player_id) {
+    option.None -> #(world, Ok(Nil))
+    option.Some(room) -> {
+      let players = list.filter(room.players, fn(id) { id != player_id })
+      let world = case players {
+        [] -> remove_room(world, room.id)
+        _ -> {
+          let new_host = case room.host_id == player_id { True -> hd(players) False -> room.host_id }
+          replace_room(world, Room(..room, host_id: new_host, players: players))
+        }
+      }
+      #(world, Ok(Nil))
+    }
+  }
+}
+
+fn hd(ids: List(Int)) -> Int { case ids { [first, ..] -> first [] -> 0 } }
+
+fn remove_player_from_session(world: World, player_id: Int) -> World {
+  let #(after_room, _) = leave_room(world, player_id)
+  World(..after_room, online_players: remove_online(after_room.online_players, player_id))
+}
+
+fn replace_room(world: World, updated: Room) -> World {
+  World(..world, rooms: list.map(world.rooms, fn(room) { case room.id == updated.id { True -> updated False -> room } }))
+}
+
+fn remove_room(world: World, room_id: String) -> World {
+  World(..world, rooms: list.filter(world.rooms, fn(room) { room.id != room_id }))
+}
+
+fn room_code(value: Int) -> String {
+  let text = int.to_string(value)
+  case string.length(text) {
+    1 -> "RM000" <> text
+    2 -> "RM00" <> text
+    3 -> "RM0" <> text
+    _ -> "RM" <> text
+  }
+}
+
+fn safe_mode(mode: String) -> String {
+  case string.lowercase(string.trim(mode)) {
+    "online" -> "online"
+    _ -> "multiplayer"
+  }
+}
+
+fn lobby_json(world: World, player_id: Int) -> Result(String, String) {
+  case player_room(world, player_id) {
+    option.None -> Ok(json.object([
+      #("type", json.string("lobby_state")), #("room_id", json.null()), #("is_host", json.bool(False)),
+      #("started", json.bool(False)), #("mode", json.string("multiplayer")), #("host_name", json.string("")), #("players", json.array([], json.string)), #("max_players", json.int(room_max_players)),
+    ]) |> json.to_string)
+    option.Some(room) -> {
+      let names = list.map(room.players, fn(id) { player_name(world, id) })
+      Ok(json.object([
+        #("type", json.string("lobby_state")),
+        #("room_id", json.string(room.id)),
+        #("is_host", json.bool(room.host_id == player_id)),
+        #("started", json.bool(room.started)),
+        #("mode", json.string(room.mode)),
+        #("host_name", json.string(player_name(world, room.host_id))),
+        #("players", json.array(names, json.string)),
+        #("max_players", json.int(room_max_players)),
+      ]) |> json.to_string)
+    }
+  }
+}
+
+fn player_name(world: World, player_id: Int) -> String {
+  list.fold(world.players, "Player", fn(current, player) { case player.id == player_id { True -> player.name False -> current } })
+}
+
 pub fn snapshot_json(world: World, player_id: Int) -> Result(String, String) {
-  case player_authorized(world, player_id) {
+  case session_valid(world, player_id) {
     False -> Error("Player session is not valid.")
     True -> {
+      let player = get_player(world.players, player_id)
       let money = player_money(world, player_id)
+      let inventory = inventory_json(player)
+      let storage_capacity = player_storage_capacity(world, player_id)
       let data = json.object([
         #("tick", json.int(world.tick)),
         #("money", json.int(money)),
+        #("inventory", inventory),
+        #("storage_used", json.int(inventory_total(player))),
+        #("storage_capacity", json.int(storage_capacity)),
+        #("in_game", json.bool(player_in_started_room(world, player_id))),
         #("banks", json.array(world.banks, bank_json)),
         #("factories", json.array(world.factories, factory_json)),
         #("warehouses", json.array(world.warehouses, warehouse_json)),
@@ -484,8 +755,9 @@ fn vehicle_json(vehicle: Vehicle) -> json.Json {
 }
 
 pub fn handle_test_factory(world: World, x: Float, y: Float) -> World {
-  let player = Player(1, "test-uid", "test", starting_money)
-  let world = World(..world, players: [player], online_players: [1])
+  let player = Player(1, "test-uid", "test", starting_money, 0, 0, 0, 0, 0)
+  let room = Room("TEST", 1, "multiplayer", [1], True)
+  let world = World(..world, players: [player], online_players: [1], rooms: [room])
   let #(world, _) = build_bank(world, 1, 0.0, 0.0)
   let #(world, _) = build_structure(world, 1, messages.Factory, x, y)
   world

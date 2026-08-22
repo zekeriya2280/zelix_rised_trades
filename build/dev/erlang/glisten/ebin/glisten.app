@@ -14,9 +14,6 @@
                glisten@socket@options,
                glisten@ssl,
                glisten@tcp,
-               glisten@transport,
-               glisten_ffi,
-               glisten_ssl_ffi,
-               glisten_tcp_ffi]},
+               glisten@transport]},
     {registered, []}
 ]}.

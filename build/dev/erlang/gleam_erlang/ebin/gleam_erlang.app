@@ -8,7 +8,6 @@
                gleam@erlang@node,
                gleam@erlang@port,
                gleam@erlang@process,
-               gleam@erlang@reference,
-               gleam_erlang_ffi]},
+               gleam@erlang@reference]},
     {registered, []}
 ]}.
