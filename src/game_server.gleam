@@ -5,6 +5,7 @@ import gleam/list
 import gleam/option
 import gleam/string
 import gleam/erlang/process
+import server/firestore
 import server/messages
 
 pub type Position { Position(x: Float, y: Float) }
@@ -14,6 +15,7 @@ pub type Player {
     id: Int,
     auth_uid: String,
     name: String,
+    auth_token: String,
     money: Int,
     wood: Int,
     stone: Int,
@@ -51,7 +53,7 @@ pub type World {
 }
 
 pub type Message {
-  JoinPlayer(auth_uid: String, name: String, reply_to: process.Subject(Result(Int, String)))
+  JoinPlayer(auth_uid: String, name: String, auth_token: String, reply_to: process.Subject(Result(Int, String)))
   LeavePlayer(player_id: Int)
   BuildBank(player_id: Int, x: Float, y: Float, reply_to: process.Subject(Result(Nil, String)))
   BuildStructure(player_id: Int, building: messages.BuildingType, x: Float, y: Float, reply_to: process.Subject(Result(Nil, String)))
@@ -101,7 +103,7 @@ fn loop(subject: process.Subject(Message), world: World) -> Nil {
 
 fn handle(message: Message, world: World) -> World {
   case message {
-    JoinPlayer(auth_uid, name, reply_to) -> {
+    JoinPlayer(auth_uid, name, auth_token, reply_to) -> {
       let nickname = safe_name(name)
       case find_player_by_uid(world.players, auth_uid) {
         option.Some(id) -> {
@@ -119,7 +121,10 @@ fn handle(message: Message, world: World) -> World {
                 False -> {
                   process.send(reply_to, Ok(id))
                   let players = list.map(world.players, fn(player) {
-                    case player.id == id { True -> Player(..player, name: nickname) False -> player }
+                    case player.id == id {
+                      True -> Player(..player, name: nickname, auth_token: auth_token)
+                      False -> player
+                    }
                   })
                   World(..world, players: players, online_players: [id, ..world.online_players])
                 }
@@ -139,7 +144,18 @@ fn handle(message: Message, world: World) -> World {
                 world
               }
               False -> {
-                let player = Player(world.next_player_id, auth_uid, nickname, starting_money, 0, 0, 0, 0, 0)
+                let player = Player(
+                  world.next_player_id,
+                  auth_uid,
+                  nickname,
+                  auth_token,
+                  starting_money,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                )
                 process.send(reply_to, Ok(player.id))
                 World(
                   ..world,
@@ -507,7 +523,7 @@ fn move_vehicle(vehicle: Vehicle) -> Vehicle {
 fn get_player(players: List(Player), player_id: Int) -> Player {
   case players {
     [player, ..rest] -> case player.id == player_id { True -> player False -> get_player(rest, player_id) }
-    [] -> Player(player_id, "", "", 0, 0, 0, 0, 0, 0)
+    [] -> Player(player_id, "", "", "", 0, 0, 0, 0, 0, 0)
   }
 }
 
@@ -580,7 +596,11 @@ fn create_room(world: World, player_id: Int, mode: String) -> #(World, Result(St
       option.Some(_) -> #(world, Error("You are already in a room."))
       option.None -> {
         let code = room_code(world.next_room_id)
-        let room = Room(code, player_id, safe_mode(mode), [player_id], False)
+        let mode = safe_mode(mode)
+        let room = Room(code, player_id, mode, [player_id], False)
+        let host = get_player(world.players, player_id)
+        firestore.save_player(host.auth_token, host.auth_uid, host.name)
+        firestore.save_room(host.auth_token, code, player_id, mode, [player_id])
         #(World(..world, rooms: [room, ..world.rooms], next_room_id: world.next_room_id + 1), Ok(code))
       }
     }
@@ -755,7 +775,7 @@ fn vehicle_json(vehicle: Vehicle) -> json.Json {
 }
 
 pub fn handle_test_factory(world: World, x: Float, y: Float) -> World {
-  let player = Player(1, "test-uid", "test", starting_money, 0, 0, 0, 0, 0)
+  let player = Player(1, "test-uid", "test", "", starting_money, 0, 0, 0, 0, 0)
   let room = Room("TEST", 1, "multiplayer", [1], True)
   let world = World(..world, players: [player], online_players: [1], rooms: [room])
   let #(world, _) = build_bank(world, 1, 0.0, 0.0)

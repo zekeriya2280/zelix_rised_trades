@@ -1,8 +1,7 @@
 use bevy::prelude::*;
 use crossbeam_channel::{unbounded, Receiver, Sender};
 use futures_util::{SinkExt, StreamExt};
-use tokio::runtime::Runtime;
-use tokio_tungstenite::{connect_async, tungstenite::Message};
+use serde_json;
 
 use super::auth::server_base;
 use super::protocol::{ClientMessage, ServerMessage, WorldSnapshot};
@@ -20,28 +19,16 @@ pub struct NetworkClient {
     pub last_error: Option<String>,
     pub retry_in: f32,
 }
+#[derive(Resource, Default)] pub struct OnlineAuthority { pub active: bool }
+#[derive(Resource, Default)] pub struct PendingSnapshot(pub Option<WorldSnapshot>);
+#[derive(Component)] pub struct ServerOwned;
 
-#[derive(Resource, Default)]
-pub struct OnlineAuthority {
-    pub active: bool,
-}
-
-#[derive(Resource, Default)]
-pub struct PendingSnapshot(Option<WorldSnapshot>);
-
-#[derive(Component)]
-pub struct ServerOwned;
-
-pub fn websocket_connect_system(
-    time: Res<Time>,
-    mut client: ResMut<NetworkClient>,
-    auth: Res<AuthStore>,
-) {
+#[cfg(not(target_arch = "wasm32"))]
+pub fn websocket_connect_system(time: Res<Time>, mut client: ResMut<NetworkClient>, auth: Res<AuthStore>) {
     client.retry_in = (client.retry_in - time.delta_secs()).max(0.0);
     if client.connected || client.connecting || client.retry_in > 0.0 { return; }
     let Some(user) = auth.current_user.as_ref() else { return; };
     if user.token.is_empty() { return; }
-
     client.connecting = true;
     client.last_error = None;
     let url = websocket_url();
@@ -50,62 +37,49 @@ pub fn websocket_connect_system(
     let (tx_in, rx_in) = unbounded::<ServerMessage>();
     client.sender = Some(tx_out);
     client.receiver = Some(rx_in);
-
     std::thread::spawn(move || {
-        let Ok(runtime) = Runtime::new() else {
-            let _ = tx_in.send(ServerMessage::Disconnected { message: "Network runtime could not start".into() });
-            return;
-        };
+        let Ok(runtime) = tokio::runtime::Runtime::new() else { let _ = tx_in.send(ServerMessage::Disconnected { message: "Network runtime could not start".into() }); return; };
         runtime.block_on(async move {
-            let Ok((socket, _)) = connect_async(&url).await else {
-                let _ = tx_in.send(ServerMessage::Disconnected { message: "WebSocket connection failed".into() });
-                return;
-            };
+            use tokio_tungstenite::{connect_async, tungstenite::Message};
+            let Ok((socket, _)) = connect_async(&url).await else { let _ = tx_in.send(ServerMessage::Disconnected { message: "WebSocket connection failed".into() }); return; };
             let (mut write, mut read) = socket.split();
-            let join = ClientMessage::Join { token };
-            let Ok(text) = serde_json::to_string(&join) else { return; };
-            if write.send(Message::Text(text.into())).await.is_err() {
-                let _ = tx_in.send(ServerMessage::Disconnected { message: "WebSocket join failed".into() });
-                return;
-            }
-
+            let Ok(text) = serde_json::to_string(&ClientMessage::Join { token }) else { return; };
+            if write.send(Message::Text(text.into())).await.is_err() { return; }
             loop {
                 tokio::select! {
-                    outgoing = recv_crossbeam(&rx_out) => {
-                        let Ok(message) = outgoing else { break; };
-                        let Ok(text) = serde_json::to_string(&message) else { continue; };
-                        if write.send(Message::Text(text.into())).await.is_err() { break; }
-                    }
-                    incoming = read.next() => {
-                        match incoming {
-                            Some(Ok(Message::Text(text))) => {
-                                if let Ok(message) = serde_json::from_str::<ServerMessage>(&text) {
-                                    let _ = tx_in.send(message);
-                                }
-                            }
-                            Some(Ok(Message::Close(_))) | None => break,
-                            Some(Ok(_)) => {}
-                            Some(Err(error)) => {
-                                let _ = tx_in.send(ServerMessage::Error { message: error.to_string() });
-                                break;
-                            }
-                        }
-                    }
+                    outgoing = recv_crossbeam(&rx_out) => { let Ok(message) = outgoing else { break; }; let Ok(text)=serde_json::to_string(&message) else { continue; }; if write.send(Message::Text(text.into())).await.is_err(){break;} }
+                    incoming = read.next() => { match incoming { Some(Ok(Message::Text(text))) => { if let Ok(message)=serde_json::from_str::<ServerMessage>(&text){let _=tx_in.send(message);} }, Some(Ok(Message::Close(_)))|None=>break, Some(Ok(_))=>{}, Some(Err(e))=>{let _=tx_in.send(ServerMessage::Error{message:e.to_string()});break;} } }
                 }
             }
-            let _ = tx_in.send(ServerMessage::Disconnected { message: "WebSocket connection closed".into() });
+            let _=tx_in.send(ServerMessage::Disconnected{message:"WebSocket connection closed".into()});
         });
     });
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 async fn recv_crossbeam<T: Send + 'static>(receiver: &Receiver<T>) -> Result<T, ()> {
-    loop {
-        match receiver.try_recv() {
-            Ok(value) => return Ok(value),
-            Err(crossbeam_channel::TryRecvError::Disconnected) => return Err(()),
-            Err(crossbeam_channel::TryRecvError::Empty) => tokio::time::sleep(std::time::Duration::from_millis(10)).await,
+    loop { match receiver.try_recv() { Ok(value)=>return Ok(value), Err(crossbeam_channel::TryRecvError::Disconnected)=>return Err(()), Err(crossbeam_channel::TryRecvError::Empty)=>tokio::time::sleep(std::time::Duration::from_millis(10)).await } }
+}
+
+#[cfg(target_arch = "wasm32")]
+pub fn websocket_connect_system(time: Res<Time>, mut client: ResMut<NetworkClient>, auth: Res<AuthStore>) {
+    client.retry_in=(client.retry_in-time.delta_secs()).max(0.0);
+    if client.connected||client.connecting||client.retry_in>0.0{return;}
+    let Some(user)=auth.current_user.as_ref() else{return;}; if user.token.is_empty(){return;}
+    client.connecting=true; client.last_error=None;
+    let url=websocket_url(); let token=user.token.clone();
+    let (tx_out,rx_out)=unbounded::<ClientMessage>(); let (tx_in,rx_in)=unbounded::<ServerMessage>();
+    client.sender=Some(tx_out); client.receiver=Some(rx_in);
+    wasm_bindgen_futures::spawn_local(async move {
+        let Ok(socket)=gloo_net::websocket::futures::WebSocket::open(&url) else {let _=tx_in.send(ServerMessage::Disconnected{message:"WebSocket connection failed".into()});return;};
+        let (mut write,mut read)=socket.split();
+        let Ok(text)=serde_json::to_string(&ClientMessage::Join{token}) else{return;}; if write.send(gloo_net::websocket::Message::Text(text)).await.is_err(){return;}
+        loop {
+            while let Ok(message)=rx_out.try_recv(){let Ok(text)=serde_json::to_string(&message) else{continue;}; if write.send(gloo_net::websocket::Message::Text(text)).await.is_err(){return;}}
+            match read.next().await { Some(Ok(gloo_net::websocket::Message::Text(text)))=>{if let Ok(message)=serde_json::from_str::<ServerMessage>(&text){let _=tx_in.send(message);}}, Some(Ok(_))=>{}, Some(Err(e))=>{let _=tx_in.send(ServerMessage::Error{message:e.to_string()});break;}, None=>break }
         }
-    }
+        let _=tx_in.send(ServerMessage::Disconnected{message:"WebSocket connection closed".into()});
+    });
 }
 
 pub fn websocket_receive_system(

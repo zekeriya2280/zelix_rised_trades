@@ -200,8 +200,9 @@ fn setup_frontend_ui_system(mut commands: Commands) {
     spawn_game(&mut commands);
 }
 
-fn spawn_root(commands: &mut Commands, screen: Screen, title: &str) -> Entity {
-    commands
+fn spawn_root(commands: &mut Commands, screen: Screen, title: &str) -> (Entity, Entity) {
+    let mut panel_id = Entity::PLACEHOLDER;
+    let root_id = commands
         .spawn((
             FrontendRoot { screen },
             Node {
@@ -218,49 +219,50 @@ fn spawn_root(commands: &mut Commands, screen: Screen, title: &str) -> Entity {
             ZIndex(2000),
         ))
         .with_children(|parent| {
-            parent
-                .spawn((
-                    Node {
-                        width: Val::Px(760.0),
-                        max_width: Val::Percent(92.0),
-                        padding: UiRect::all(Val::Px(24.0)),
-                        flex_direction: FlexDirection::Column,
-                        row_gap: Val::Px(14.0),
-                        border: UiRect::all(Val::Px(1.0)),
+            let mut panel = parent.spawn((
+                Node {
+                    width: Val::Px(760.0),
+                    max_width: Val::Percent(92.0),
+                    padding: UiRect::all(Val::Px(24.0)),
+                    flex_direction: FlexDirection::Column,
+                    row_gap: Val::Px(14.0),
+                    border: UiRect::all(Val::Px(1.0)),
+                    ..default()
+                },
+                BackgroundColor(PANEL),
+                BorderColor::all(ACCENT),
+            ));
+            panel_id = panel.id();
+            panel.with_children(|panel| {
+                panel.spawn((
+                    Text::new(title),
+                    TextFont {
+                        font_size: FontSize::Px(34.0),
                         ..default()
                     },
-                    BackgroundColor(PANEL),
-                    BorderColor::all(ACCENT),
-                ))
-                .with_children(|panel| {
-                    panel.spawn((
-                        Text::new(title),
-                        TextFont {
-                            font_size: FontSize::Px(34.0),
-                            ..default()
-                        },
-                        TextColor(TEXT),
-                    ));
-                });
+                    TextColor(TEXT),
+                ));
+            });
         })
-        .id()
+        .id();
+    (root_id, panel_id)
 }
 
 
 fn spawn_auth_gate(commands: &mut Commands) {
-    let root = spawn_root(commands, Screen::AuthGate, "Zelix Rised Trades");
-    commands.entity(root).with_children(|panel| {
-        spawn_paragraph(panel, "Secure sign-in, nickname check, and online-ready lobby flow.", MUTED);
-        spawn_paragraph(panel, "Your account decides whether you enter Login, Register, or Intro.", MUTED);
-        spawn_button(panel, "Go to Login", Action::GoLogin);
-        spawn_button(panel, "Go to Register", Action::GoRegister);
-        spawn_hint(panel, "After signing in or registering you will be taken to Intro automatically.");
+    let (_root, panel) = spawn_root(commands, Screen::AuthGate, "Zelix Rised Trades");
+    commands.entity(panel).with_children(|content| {
+        spawn_paragraph(content, "Secure sign-in, nickname check, and online-ready lobby flow.", MUTED);
+        spawn_paragraph(content, "Your account decides whether you enter Login, Register, or Intro.", MUTED);
+        spawn_button(content, "Go to Login", Action::GoLogin);
+        spawn_button(content, "Go to Register", Action::GoRegister);
+        spawn_hint(content, "After signing in or registering you will be taken to Intro automatically.");
     });
 }
 
 fn spawn_login(commands: &mut Commands) {
-    let root = spawn_root(commands, Screen::Login, "Login");
-    commands.entity(root).with_children(|panel| {
+    let (_root, panel) = spawn_root(commands, Screen::Login, "Login");
+    commands.entity(panel).with_children(|panel| {
         spawn_paragraph(panel, "Enter email and password. Tab cycles fields.", MUTED);
         spawn_field(panel, "Email", AuthField::LoginEmail);
         spawn_field(panel, "Password", AuthField::LoginPassword);
@@ -272,8 +274,8 @@ fn spawn_login(commands: &mut Commands) {
 }
 
 fn spawn_register(commands: &mut Commands) {
-    let root = spawn_root(commands, Screen::Register, "Register");
-    commands.entity(root).with_children(|panel| {
+    let (_root, panel) = spawn_root(commands, Screen::Register, "Register");
+    commands.entity(panel).with_children(|panel| {
         spawn_paragraph(panel, "Create account, choose a unique nickname, then enter Intro.", MUTED);
         spawn_field(panel, "Email", AuthField::RegisterEmail);
         spawn_field(panel, "Password", AuthField::RegisterPassword);
@@ -286,8 +288,8 @@ fn spawn_register(commands: &mut Commands) {
 }
 
 fn spawn_intro(commands: &mut Commands) {
-    let root = spawn_root(commands, Screen::Intro, "Intro / Main Menu");
-    commands.entity(root).with_children(|panel| {
+    let (_root, panel) = spawn_root(commands, Screen::Intro, "Intro / Main Menu");
+    commands.entity(panel).with_children(|panel| {
         spawn_paragraph(panel, "Choose a mode. Single Player opens the current game immediately.", MUTED);
         spawn_button(panel, "Single Player", Action::IntroSingle);
         spawn_button(panel, "Multiplayer", Action::IntroMulti);
@@ -299,8 +301,8 @@ fn spawn_intro(commands: &mut Commands) {
 }
 
 fn spawn_lobby(commands: &mut Commands) {
-    let root = spawn_root(commands, Screen::Lobby, "Lobby");
-    commands.entity(root).with_children(|panel| {
+    let (_root, panel) = spawn_root(commands, Screen::Lobby, "Lobby");
+    commands.entity(panel).with_children(|panel| {
         spawn_paragraph(panel, "Create a room or join one by code. Rooms cap at 5 players.", MUTED);
         spawn_field(panel, "Room code", AuthField::RoomCode);
         spawn_button(panel, "Create game", Action::LobbyCreate);
@@ -319,8 +321,8 @@ fn spawn_lobby(commands: &mut Commands) {
 }
 
 fn spawn_settings(commands: &mut Commands) {
-    let root = spawn_root(commands, Screen::Settings, "Settings");
-    commands.entity(root).with_children(|panel| {
+    let (_root, panel) = spawn_root(commands, Screen::Settings, "Settings");
+    commands.entity(panel).with_children(|panel| {
         spawn_paragraph(panel, "Style, controls, and future sync options live here.", MUTED);
         spawn_button(panel, "Back to Intro", Action::SettingsBack);
         panel.spawn((
@@ -816,16 +818,21 @@ fn send_lobby_command(
         state.lobby_message = String::from("Login first.");
         return;
     }
-    if !network.connected {
-        state.lobby_message = String::from("Connecting to game server...");
-        return;
-    }
     let Some(sender) = network.sender.as_ref() else {
-        state.lobby_message = String::from("Network channel is unavailable.");
+        // No connection attempt in progress yet. The websocket auto-connects as
+        // soon as the signed-in user's token is available, so surface a clear
+        // message and let the retry keep trying rather than dropping the click.
+        state.lobby_message = String::from("Connecting to game server... The command will be sent once the connection is available.");
         return;
     };
+    // The `sender` channel buffers outgoing messages until the socket is up, so
+    // do NOT gate on `network.connected` here: dropping the request on the very
+    // first click (while the websocket is still establishing) is exactly why the
+    // Create/Enter buttons appeared to "do nothing".
     if sender.send(message).is_err() {
         state.lobby_message = String::from("Failed to send lobby command.");
+    } else if !network.connected {
+        state.lobby_message = String::from("Connecting to game server... command queued.");
     } else {
         state.lobby_message = String::from("Waiting for server...");
     }

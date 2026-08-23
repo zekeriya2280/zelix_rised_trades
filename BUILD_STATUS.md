@@ -1,14 +1,12 @@
-# Verification status
+# Build Status
 
-The ZIP was checked for archive integrity and for accidental inclusion of generated `build/` / `target/` output.
+- Firebase nested `accounts:lookup` parsing fixed (`users[0].localId`, `users[0].displayName`).
+- Firebase config auto-discovery added (`firebase_config.json` then `google-services.json`).
+- Desktop/Android native networking and Web/WASM browser networking are separated with target-specific dependencies.
+- Shared protocol remains common to all clients for cross-play.
+- Added Firestore persistence for player registrations (`players` collection) and created rooms (`rooms` collection) via the REST API. A shared `server/firebase_config` module now exposes both `api_key` and the project id.
+- Android GameActivity support enabled for Bevy 0.19.
+- Web Trunk entry point included.
+- Generated `build/` and `game_client/target/` are intentionally omitted from the ZIP.
 
-Static checks completed:
-
-- Client/server websocket message names and lobby fields were aligned.
-- Firebase join flow uses server-side token identity lookup.
-- Client-side local room mutation code was removed.
-- Server-only world commands are gated behind an active started room.
-- Authoritative inventory/storage fields are present in snapshots and consumed by the client.
-- Server-owned entities are reconciled by ID.
-
-Full `cargo check` / `cargo test` and `gleam test` / `gleam check` could not be executed in the packaging environment because Rust/Cargo, Gleam, and Erlang/OTP executables are not installed there. The source package itself is complete and excludes generated build products.
+Live compiler/test execution was not available in the assembly environment because Rust/Cargo and Gleam/Erlang executables are not installed.

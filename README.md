@@ -1,40 +1,69 @@
 # Zelix Rised Trades
 
-Server-authoritative Gleam/Mist multiplayer server with a Bevy client.
+## Final platform architecture
 
-## Structure
+The same authoritative game server and protocol are shared by Desktop, Android, and Web clients. A player on Android, a player in a browser, and a desktop player can join the same room and exchange the same `ClientMessage` / `ServerMessage` protocol.
 
-- `src/`: Gleam game server and Firebase authentication.
-- `game_client/`: Bevy client.
-- `manifest.toml` / `game_client/Cargo.lock`: locked dependency metadata.
+### Client transports
 
-## Environment
+- Desktop: native HTTP + native WebSocket via Tokio.
+- Android: native HTTP + native WebSocket via Tokio; Bevy 0.19 `android-game-activity`.
+- Web: browser HTTP + browser WebSocket via `gloo-net` on WASM.
 
-Server:
+The gameplay authority remains on the Gleam server. Clients send commands; the server validates and broadcasts authoritative state/snapshots.
 
-```powershell
-$env:FIREBASE_WEB_API_KEY="YOUR_FIREBASE_WEB_API_KEY"
-```
+## Firebase configuration
 
-Client:
+Firebase configuration is discovered automatically by the server. Put one of these files in the server project root, next to `gleam.toml`:
+
+1. `firebase_config.json` — the Firebase Web configuration object, containing at least `apiKey` and `projectId`.
+2. `google-services.json` — Firebase's Android app config; the server scans its `project_info.project_id` and `client[]` entries for a usable `api_key[].current_key`.
+
+Do not hard-code Firebase API keys into Rust/Gleam source. Firebase documents Android `google-services.json` and Web configuration objects as separate platform artifacts.
+
+### Firestore persistence
+
+The server persists a small amount of state to Cloud Firestore through the REST API:
+
+- When a player registers, a document is written to the `players` collection keyed by the Firebase `localId` (fields: `uid`, `nickname`).
+- When the server creates a room, a document is written to the `rooms` collection keyed by the room code (fields: `code`, `host_id`, `mode`, `started`, `players`), and the host player is also written to the `players` collection keyed by `localId`. Writes are upserts, so re-logging-in or recreating is safe.
+
+Writes run on a background process so they never block the game loop. They are authorized with the logged-in user's Firebase ID token sent as a `Authorization: Bearer <id_token>` header to the Firestore REST endpoint `https://firestore.googleapis.com/v1` (Firestore writes cannot be done with an API key alone). Because writes are made as the end user, your Firestore **security rules must allow these writes** for authenticated users — at minimum `allow read, write: if request.auth != null;` (Firestore "test mode"). Rules that require specific users or deny unauthenticated writes will silently drop documents. citeturn855618search4turn855618search9
+
+## Server
+
+The default development server listens on `0.0.0.0:8765`. For production Web, expose it behind HTTPS and use `wss://` for the browser WebSocket connection.
+
+## Desktop development
+
+Set `GAME_SERVER_URL` when the server is not on `127.0.0.1:8765` and run the Bevy client normally.
+
+## Web development
+
+Install the Rust WASM target and Trunk, then:
 
 ```powershell
 $env:GAME_SERVER_URL="http://127.0.0.1:8765"
+trunk serve web/index.html
 ```
 
-For a remote deployment, point `GAME_SERVER_URL` at the server host. The server binds to `0.0.0.0:8765`; put TLS (`wss://`) in front of it with a reverse proxy for production.
+For production HTTPS hosting, set `GAME_SERVER_URL` at build time or reverse-proxy the game server under the same origin.
 
-## Multiplayer flow
+## Android development
 
-1. Firebase token is verified by the server.
-2. The server obtains the nickname from Firebase rather than trusting the client name field.
-3. Room creation, join, start and leave are server-authoritative.
-4. A room is limited to five players.
-5. Building, vehicle, factory-product and production state are authoritative on the server once the room starts.
-6. Inventory and warehouse capacity are included in authoritative snapshots.
-7. Only one room may be started at a time; this avoids cross-room state leakage while waiting lobbies remain independent.
-8. The Bevy client only reconciles server-owned entities while in an active online room.
+Bevy 0.19 requires the Android GameActivity feature explicitly. The project enables it and builds a `cdylib` for Android. Use `cargo ndk` to create the native library, then package it in an Android/Gradle GameActivity host. Bevy's current Android guidance uses `android-game-activity` and `cargo-ndk`. citeturn855618search0turn930284search2turn930284search10
 
-## Development
+Example:
 
-Do not commit or package `build/` or `game_client/target/`. They are generated build outputs and can be recreated locally.
+```powershell
+$env:GAME_SERVER_URL="http://10.0.2.2:8765"
+cargo ndk -t arm64-v8a -o android/app/src/main/jniLibs build --manifest-path game_client/Cargo.toml
+```
+
+## Generated directories
+
+`build/` and `game_client/target/` are generated by Gleam/Cargo and intentionally do not belong to the source ZIP. They will be recreated automatically by builds.
+
+## Verification
+
+This source package was statically checked and its ZIP archive is integrity-tested. The execution environment used to assemble it does not contain the Rust/Gleam toolchains, so a live `cargo check` / `gleam test` run could not be performed here.

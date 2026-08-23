@@ -5,7 +5,7 @@
 
 -type position() :: {position, float(), float()}.
 
--type player() :: {player, integer(), binary(), binary(), integer(), integer(), integer(), integer(), integer(), integer()}.
+-type player() :: {player, integer(), binary(), binary(), binary(), integer(), integer(), integer(), integer(), integer(), integer()}.
 
 -type bank() :: {bank, integer(), integer(), position()}.
 
@@ -21,39 +21,39 @@
 
 -type world() :: {world, integer(), integer(), integer(), list(player()), list(bank()), list(factory()), list(warehouse()), list(simple_building()), list(simple_building()), list(vehicle()), list(integer()), list(room()), integer()}.
 
--type message() :: {join_player, binary(), binary(), gleam@erlang@process:subject({ok, integer()} | {error, binary()})} | {leave_player, integer()} | {build_bank, integer(), float(), float(), gleam@erlang@process:subject({ok, nil} | {error, binary()})} | {build_structure, integer(), server@messages:building_type(), float(), float(), gleam@erlang@process:subject({ok, nil} | {error, binary()})} | {spawn_vehicle, integer(), float(), float(), float(), float(), float(), gleam@erlang@process:subject({ok, nil} | {error, binary()})} | {set_factory_product, integer(), integer(), server@messages:product_type(), gleam@erlang@process:subject({ok, nil} | {error, binary()})} | {create_room, integer(), binary(), gleam@erlang@process:subject({ok, binary()} | {error, binary()})} | {join_room, integer(), binary(), gleam@erlang@process:subject({ok, binary()} | {error, binary()})} | {start_room, integer(), gleam@erlang@process:subject({ok, nil} | {error, binary()})} | {leave_room, integer(), gleam@erlang@process:subject({ok, nil} | {error, binary()})} | {get_lobby, integer(), gleam@erlang@process:subject({ok, binary()} | {error, binary()})} | {get_snapshot, integer(), gleam@erlang@process:subject({ok, binary()} | {error, binary()})}.
+-type message() :: {join_player, binary(), binary(), binary(), gleam@erlang@process:subject({ok, integer()} | {error, binary()})} | {leave_player, integer()} | {build_bank, integer(), float(), float(), gleam@erlang@process:subject({ok, nil} | {error, binary()})} | {build_structure, integer(), server@messages:building_type(), float(), float(), gleam@erlang@process:subject({ok, nil} | {error, binary()})} | {spawn_vehicle, integer(), float(), float(), float(), float(), float(), gleam@erlang@process:subject({ok, nil} | {error, binary()})} | {set_factory_product, integer(), integer(), server@messages:product_type(), gleam@erlang@process:subject({ok, nil} | {error, binary()})} | {create_room, integer(), binary(), gleam@erlang@process:subject({ok, binary()} | {error, binary()})} | {join_room, integer(), binary(), gleam@erlang@process:subject({ok, binary()} | {error, binary()})} | {start_room, integer(), gleam@erlang@process:subject({ok, nil} | {error, binary()})} | {leave_room, integer(), gleam@erlang@process:subject({ok, nil} | {error, binary()})} | {get_lobby, integer(), gleam@erlang@process:subject({ok, binary()} | {error, binary()})} | {get_snapshot, integer(), gleam@erlang@process:subject({ok, binary()} | {error, binary()})}.
 
--file("src\\game_server.gleam", 90).
+-file("src\\game_server.gleam", 92).
 -spec initial_world() -> world().
 initial_world() ->
     {world, 0, 1, 1, [], [], [], [], [], [], [], [], [], 1}.
 
--file("src\\game_server.gleam", 527).
+-file("src\\game_server.gleam", 543).
 -spec add_product(player(), server@messages:product_type(), integer()) -> player().
 add_product(Player, Product, Amount) ->
     case Product of
         wood ->
-            {player, erlang:element(2, Player), erlang:element(3, Player), erlang:element(4, Player), erlang:element(5, Player), erlang:element(6, Player) + Amount, erlang:element(7, Player), erlang:element(8, Player), erlang:element(9, Player), erlang:element(10, Player)};
+            {player, erlang:element(2, Player), erlang:element(3, Player), erlang:element(4, Player), erlang:element(5, Player), erlang:element(6, Player), erlang:element(7, Player) + Amount, erlang:element(8, Player), erlang:element(9, Player), erlang:element(10, Player), erlang:element(11, Player)};
 
         stone ->
-            {player, erlang:element(2, Player), erlang:element(3, Player), erlang:element(4, Player), erlang:element(5, Player), erlang:element(6, Player), erlang:element(7, Player) + Amount, erlang:element(8, Player), erlang:element(9, Player), erlang:element(10, Player)};
+            {player, erlang:element(2, Player), erlang:element(3, Player), erlang:element(4, Player), erlang:element(5, Player), erlang:element(6, Player), erlang:element(7, Player), erlang:element(8, Player) + Amount, erlang:element(9, Player), erlang:element(10, Player), erlang:element(11, Player)};
 
         iron ->
-            {player, erlang:element(2, Player), erlang:element(3, Player), erlang:element(4, Player), erlang:element(5, Player), erlang:element(6, Player), erlang:element(7, Player), erlang:element(8, Player) + Amount, erlang:element(9, Player), erlang:element(10, Player)};
+            {player, erlang:element(2, Player), erlang:element(3, Player), erlang:element(4, Player), erlang:element(5, Player), erlang:element(6, Player), erlang:element(7, Player), erlang:element(8, Player), erlang:element(9, Player) + Amount, erlang:element(10, Player), erlang:element(11, Player)};
 
         gold ->
-            {player, erlang:element(2, Player), erlang:element(3, Player), erlang:element(4, Player), erlang:element(5, Player), erlang:element(6, Player), erlang:element(7, Player), erlang:element(8, Player), erlang:element(9, Player) + Amount, erlang:element(10, Player)};
+            {player, erlang:element(2, Player), erlang:element(3, Player), erlang:element(4, Player), erlang:element(5, Player), erlang:element(6, Player), erlang:element(7, Player), erlang:element(8, Player), erlang:element(9, Player), erlang:element(10, Player) + Amount, erlang:element(11, Player)};
 
         grain ->
-            {player, erlang:element(2, Player), erlang:element(3, Player), erlang:element(4, Player), erlang:element(5, Player), erlang:element(6, Player), erlang:element(7, Player), erlang:element(8, Player), erlang:element(9, Player), erlang:element(10, Player) + Amount}
+            {player, erlang:element(2, Player), erlang:element(3, Player), erlang:element(4, Player), erlang:element(5, Player), erlang:element(6, Player), erlang:element(7, Player), erlang:element(8, Player), erlang:element(9, Player), erlang:element(10, Player), erlang:element(11, Player) + Amount}
     end.
 
--file("src\\game_server.gleam", 514).
+-file("src\\game_server.gleam", 530).
 -spec inventory_total(player()) -> integer().
 inventory_total(Player) ->
-    (((erlang:element(6, Player) + erlang:element(7, Player)) + erlang:element(8, Player)) + erlang:element(9, Player)) + erlang:element(10, Player).
+    (((erlang:element(7, Player) + erlang:element(8, Player)) + erlang:element(9, Player)) + erlang:element(10, Player)) + erlang:element(11, Player).
 
--file("src\\game_server.gleam", 516).
+-file("src\\game_server.gleam", 532).
 -spec positive_or_zero(integer()) -> integer().
 positive_or_zero(Value) ->
     case Value > 0 of
@@ -64,7 +64,7 @@ positive_or_zero(Value) ->
             0
     end.
 
--file("src\\game_server.gleam", 520).
+-file("src\\game_server.gleam", 536).
 -spec add_product_capped(player(), server@messages:product_type(), integer(), integer()) -> player().
 add_product_capped(Player, Product, Amount, Capacity) ->
     Room = positive_or_zero(Capacity - inventory_total(Player)),
@@ -76,9 +76,9 @@ add_product_capped(Player, Product, Amount, Capacity) ->
             Room
     end,
     Updated = add_product(Player, Product, Amount@1),
-    {player, erlang:element(2, Updated), erlang:element(3, Updated), erlang:element(4, Updated), erlang:element(5, Updated) + (server@messages:product_value(Product) * Amount@1), erlang:element(6, Updated), erlang:element(7, Updated), erlang:element(8, Updated), erlang:element(9, Updated), erlang:element(10, Updated)}.
+    {player, erlang:element(2, Updated), erlang:element(3, Updated), erlang:element(4, Updated), erlang:element(5, Updated), erlang:element(6, Updated) + (server@messages:product_value(Product) * Amount@1), erlang:element(7, Updated), erlang:element(8, Updated), erlang:element(9, Updated), erlang:element(10, Updated), erlang:element(11, Updated)}.
 
--file("src\\game_server.gleam", 225).
+-file("src\\game_server.gleam", 241).
 -spec produce_for_player(player(), list(factory()), list(warehouse())) -> player().
 produce_for_player(Player, Factories, Warehouses) ->
     Capacity = gleam@list:fold(Warehouses, 0, fun(Total, Warehouse) ->
@@ -108,7 +108,7 @@ produce_for_player(Player, Factories, Warehouses) ->
             end)
     end.
 
--file("src\\game_server.gleam", 425).
+-file("src\\game_server.gleam", 441).
 -spec distance(position(), position()) -> float().
 distance(A, B) ->
     Dx = erlang:element(2, B) - erlang:element(2, A),
@@ -121,7 +121,7 @@ distance(A, B) ->
             +0.0
     end.
 
--file("src\\game_server.gleam", 494).
+-file("src\\game_server.gleam", 510).
 -spec move_vehicle(vehicle()) -> vehicle().
 move_vehicle(Vehicle) ->
     {position, X, Y} = erlang:element(4, Vehicle),
@@ -156,7 +156,7 @@ move_vehicle(Vehicle) ->
             end * Step)}, erlang:element(5, Vehicle), erlang:element(6, Vehicle)}
     end.
 
--file("src\\game_server.gleam", 214).
+-file("src\\game_server.gleam", 230).
 -spec update(world()) -> world().
 update(World) ->
     Next_tick = erlang:element(2, World) + 1,
@@ -178,38 +178,38 @@ update(World) ->
     end,
     {world, Next_tick, erlang:element(3, World), erlang:element(4, World), Players, erlang:element(6, World), erlang:element(7, World), erlang:element(8, World), erlang:element(9, World), erlang:element(10, World), Vehicles, erlang:element(12, World), erlang:element(13, World), erlang:element(14, World)}.
 
--file("src\\game_server.gleam", 751).
+-file("src\\game_server.gleam", 771).
 -spec vehicle_json(vehicle()) -> gleam@json:json().
 vehicle_json(Vehicle) ->
     {position, X, Y} = erlang:element(4, Vehicle),
     {position, Tx, Ty} = erlang:element(5, Vehicle),
     gleam@json:object([{~"id", gleam@json:int(erlang:element(2, Vehicle))}, {~"owner_id", gleam@json:int(erlang:element(3, Vehicle))}, {~"x", gleam@json:float(X)}, {~"y", gleam@json:float(Y)}, {~"target_x", gleam@json:float(Tx)}, {~"target_y", gleam@json:float(Ty)}, {~"speed", gleam@json:float(erlang:element(6, Vehicle))}]).
 
--file("src\\game_server.gleam", 747).
+-file("src\\game_server.gleam", 767).
 -spec simple_json(simple_building()) -> gleam@json:json().
 simple_json(Building) ->
     {position, X, Y} = erlang:element(4, Building),
     gleam@json:object([{~"id", gleam@json:int(erlang:element(2, Building))}, {~"owner_id", gleam@json:int(erlang:element(3, Building))}, {~"x", gleam@json:float(X)}, {~"y", gleam@json:float(Y)}]).
 
--file("src\\game_server.gleam", 743).
+-file("src\\game_server.gleam", 763).
 -spec warehouse_json(warehouse()) -> gleam@json:json().
 warehouse_json(Warehouse) ->
     {position, X, Y} = erlang:element(4, Warehouse),
     gleam@json:object([{~"id", gleam@json:int(erlang:element(2, Warehouse))}, {~"owner_id", gleam@json:int(erlang:element(3, Warehouse))}, {~"x", gleam@json:float(X)}, {~"y", gleam@json:float(Y)}, {~"capacity", gleam@json:int(erlang:element(5, Warehouse))}]).
 
--file("src\\game_server.gleam", 739).
+-file("src\\game_server.gleam", 759).
 -spec factory_json(factory()) -> gleam@json:json().
 factory_json(Factory) ->
     {position, X, Y} = erlang:element(4, Factory),
     gleam@json:object([{~"id", gleam@json:int(erlang:element(2, Factory))}, {~"owner_id", gleam@json:int(erlang:element(3, Factory))}, {~"x", gleam@json:float(X)}, {~"y", gleam@json:float(Y)}, {~"level", gleam@json:int(erlang:element(5, Factory))}, {~"product", server@messages:product_json(erlang:element(6, Factory))}]).
 
--file("src\\game_server.gleam", 735).
+-file("src\\game_server.gleam", 755).
 -spec bank_json(bank()) -> gleam@json:json().
 bank_json(Bank) ->
     {position, X, Y} = erlang:element(4, Bank),
     gleam@json:object([{~"id", gleam@json:int(erlang:element(2, Bank))}, {~"owner_id", gleam@json:int(erlang:element(3, Bank))}, {~"x", gleam@json:float(X)}, {~"y", gleam@json:float(Y)}]).
 
--file("src\\game_server.gleam", 553).
+-file("src\\game_server.gleam", 569).
 -spec player_in_started_room(world(), integer()) -> boolean().
 player_in_started_room(World, Player_id) ->
     gleam@list:any(erlang:element(13, World), fun(Room) ->
@@ -218,7 +218,7 @@ player_in_started_room(World, Player_id) ->
         end)
     end).
 
--file("src\\game_server.gleam", 537).
+-file("src\\game_server.gleam", 553).
 -spec player_storage_capacity(world(), integer()) -> integer().
 player_storage_capacity(World, Player_id) ->
     gleam@list:fold(erlang:element(8, World), 0, fun(Total, Warehouse) ->
@@ -231,25 +231,25 @@ player_storage_capacity(World, Player_id) ->
         end
     end).
 
--file("src\\game_server.gleam", 543).
+-file("src\\game_server.gleam", 559).
 -spec inventory_json(player()) -> gleam@json:json().
 inventory_json(Player) ->
-    gleam@json:object([{~"wood", gleam@json:int(erlang:element(6, Player))}, {~"stone", gleam@json:int(erlang:element(7, Player))}, {~"iron", gleam@json:int(erlang:element(8, Player))}, {~"gold", gleam@json:int(erlang:element(9, Player))}, {~"grain", gleam@json:int(erlang:element(10, Player))}]).
+    gleam@json:object([{~"wood", gleam@json:int(erlang:element(7, Player))}, {~"stone", gleam@json:int(erlang:element(8, Player))}, {~"iron", gleam@json:int(erlang:element(9, Player))}, {~"gold", gleam@json:int(erlang:element(10, Player))}, {~"grain", gleam@json:int(erlang:element(11, Player))}]).
 
--file("src\\game_server.gleam", 468).
+-file("src\\game_server.gleam", 484).
 -spec player_money(world(), integer()) -> integer().
 player_money(World, Player_id) ->
     gleam@list:fold(erlang:element(5, World), 0, fun(Money, Player) ->
         case erlang:element(2, Player) =:= Player_id of
             true ->
-                erlang:element(5, Player);
+                erlang:element(6, Player);
 
             false ->
                 Money
         end
     end).
 
--file("src\\game_server.gleam", 507).
+-file("src\\game_server.gleam", 523).
 -spec get_player(list(player()), integer()) -> player().
 get_player(Players, Player_id) ->
     case Players of
@@ -263,29 +263,29 @@ get_player(Players, Player_id) ->
             end;
 
         [] ->
-            {player, Player_id, ~"", ~"", 0, 0, 0, 0, 0, 0}
+            {player, Player_id, ~"", ~"", ~"", 0, 0, 0, 0, 0, 0}
     end.
 
--file("src\\game_server.gleam", 446).
+-file("src\\game_server.gleam", 462).
 -spec is_online(world(), integer()) -> boolean().
 is_online(World, Player_id) ->
     gleam@list:any(erlang:element(12, World), fun(Id) ->
         Id =:= Player_id
     end).
 
--file("src\\game_server.gleam", 444).
+-file("src\\game_server.gleam", 460).
 -spec player_exists(world(), integer()) -> boolean().
 player_exists(World, Player_id) ->
     gleam@list:any(erlang:element(5, World), fun(Player) ->
         erlang:element(2, Player) =:= Player_id
     end).
 
--file("src\\game_server.gleam", 448).
+-file("src\\game_server.gleam", 464).
 -spec session_valid(world(), integer()) -> boolean().
 session_valid(World, Player_id) ->
     player_exists(World, Player_id) andalso is_online(World, Player_id).
 
--file("src\\game_server.gleam", 707).
+-file("src\\game_server.gleam", 727).
 -spec snapshot_json(world(), integer()) -> {ok, binary()} | {error, binary()}.
 snapshot_json(World, Player_id) ->
     case session_valid(World, Player_id) of
@@ -305,7 +305,7 @@ snapshot_json(World, Player_id) ->
             end}
     end.
 
--file("src\\game_server.gleam", 703).
+-file("src\\game_server.gleam", 723).
 -spec player_name(world(), integer()) -> binary().
 player_name(World, Player_id) ->
     gleam@list:fold(erlang:element(5, World), ~"Player", fun(Current, Player) ->
@@ -318,7 +318,7 @@ player_name(World, Player_id) ->
         end
     end).
 
--file("src\\game_server.gleam", 557).
+-file("src\\game_server.gleam", 573).
 -spec player_room(world(), integer()) -> gleam@option:option(room()).
 player_room(World, Player_id) ->
     gleam@list:fold(erlang:element(13, World), none, fun(Found, Room) ->
@@ -339,7 +339,7 @@ player_room(World, Player_id) ->
         end
     end).
 
--file("src\\game_server.gleam", 681).
+-file("src\\game_server.gleam", 701).
 -spec lobby_json(world(), integer()) -> {ok, binary()} | {error, binary()}.
 lobby_json(World, Player_id) ->
     case player_room(World, Player_id) of
@@ -359,7 +359,7 @@ lobby_json(World, Player_id) ->
             end}
     end.
 
--file("src\\game_server.gleam", 656).
+-file("src\\game_server.gleam", 676).
 -spec replace_room(world(), room()) -> world().
 replace_room(World, Updated) ->
     {world, erlang:element(2, World), erlang:element(3, World), erlang:element(4, World), erlang:element(5, World), erlang:element(6, World), erlang:element(7, World), erlang:element(8, World), erlang:element(9, World), erlang:element(10, World), erlang:element(11, World), erlang:element(12, World), gleam@list:map(erlang:element(13, World), fun(Room) ->
@@ -372,7 +372,7 @@ replace_room(World, Updated) ->
         end
     end), erlang:element(14, World)}.
 
--file("src\\game_server.gleam", 649).
+-file("src\\game_server.gleam", 669).
 -spec hd(list(integer())) -> integer().
 hd(Ids) ->
     case Ids of
@@ -383,14 +383,14 @@ hd(Ids) ->
             0
     end.
 
--file("src\\game_server.gleam", 660).
+-file("src\\game_server.gleam", 680).
 -spec remove_room(world(), binary()) -> world().
 remove_room(World, Room_id) ->
     {world, erlang:element(2, World), erlang:element(3, World), erlang:element(4, World), erlang:element(5, World), erlang:element(6, World), erlang:element(7, World), erlang:element(8, World), erlang:element(9, World), erlang:element(10, World), erlang:element(11, World), erlang:element(12, World), gleam@list:filter(erlang:element(13, World), fun(Room) ->
         erlang:element(2, Room) /= Room_id
     end), erlang:element(14, World)}.
 
--file("src\\game_server.gleam", 632).
+-file("src\\game_server.gleam", 652).
 -spec leave_room(world(), integer()) -> {world(), {ok, nil} | {error, binary()}}.
 leave_room(World, Player_id) ->
     case player_room(World, Player_id) of
@@ -418,14 +418,14 @@ leave_room(World, Player_id) ->
             {World@1, {ok, nil}}
     end.
 
--file("src\\game_server.gleam", 628).
+-file("src\\game_server.gleam", 648).
 -spec any_started_room_other_than(world(), binary()) -> boolean().
 any_started_room_other_than(World, Room_id) ->
     gleam@list:any(erlang:element(13, World), fun(Room) ->
         (erlang:element(2, Room) /= Room_id) andalso erlang:element(6, Room)
     end).
 
--file("src\\game_server.gleam", 612).
+-file("src\\game_server.gleam", 632).
 -spec start_room(world(), integer()) -> {world(), {ok, nil} | {error, binary()}}.
 start_room(World, Player_id) ->
     case player_room(World, Player_id) of
@@ -454,7 +454,7 @@ start_room(World, Player_id) ->
             end
     end.
 
--file("src\\game_server.gleam", 566).
+-file("src\\game_server.gleam", 582).
 -spec room_by_id(world(), binary()) -> gleam@option:option(room()).
 room_by_id(World, Code) ->
     Normalized = string:uppercase(gleam@string:trim(Code)),
@@ -474,7 +474,7 @@ room_by_id(World, Code) ->
         end
     end).
 
--file("src\\game_server.gleam", 590).
+-file("src\\game_server.gleam", 610).
 -spec join_room(world(), integer(), binary()) -> {world(), {ok, binary()} | {error, binary()}}.
 join_room(World, Player_id, Code) ->
     case session_valid(World, Player_id) of
@@ -510,7 +510,7 @@ join_room(World, Player_id, Code) ->
             end
     end.
 
--file("src\\game_server.gleam", 674).
+-file("src\\game_server.gleam", 694).
 -spec safe_mode(binary()) -> binary().
 safe_mode(Mode) ->
     case string:lowercase(gleam@string:trim(Mode)) of
@@ -521,7 +521,7 @@ safe_mode(Mode) ->
             ~"multiplayer"
     end.
 
--file("src\\game_server.gleam", 664).
+-file("src\\game_server.gleam", 684).
 -spec room_code(integer()) -> binary().
 room_code(Value) ->
     Text = erlang:integer_to_binary(Value),
@@ -539,7 +539,7 @@ room_code(Value) ->
             <<"RM"/utf8, Text/binary>>
     end.
 
--file("src\\game_server.gleam", 576).
+-file("src\\game_server.gleam", 592).
 -spec create_room(world(), integer(), binary()) -> {world(), {ok, binary()} | {error, binary()}}.
 create_room(World, Player_id, Mode) ->
     case session_valid(World, Player_id) of
@@ -553,12 +553,16 @@ create_room(World, Player_id, Mode) ->
 
                 none ->
                     Code = room_code(erlang:element(14, World)),
-                    Room = {room, Code, Player_id, safe_mode(Mode), [Player_id], false},
+                    Mode@1 = safe_mode(Mode),
+                    Room = {room, Code, Player_id, Mode@1, [Player_id], false},
+                    Host = get_player(erlang:element(5, World), Player_id),
+                    server@firestore:save_player(erlang:element(5, Host), erlang:element(3, Host), erlang:element(4, Host)),
+                    server@firestore:save_room(erlang:element(5, Host), Code, Player_id, Mode@1, [Player_id]),
                     {{world, erlang:element(2, World), erlang:element(3, World), erlang:element(4, World), erlang:element(5, World), erlang:element(6, World), erlang:element(7, World), erlang:element(8, World), erlang:element(9, World), erlang:element(10, World), erlang:element(11, World), erlang:element(12, World), [Room | erlang:element(13, World)], erlang:element(14, World) + 1}, {ok, Code}}
             end
     end.
 
--file("src\\game_server.gleam", 334).
+-file("src\\game_server.gleam", 350).
 -spec set_factory_product(world(), integer(), integer(), server@messages:product_type()) -> {world(), {ok, nil} | {error, binary()}}.
 set_factory_product(World, Player_id, Factory_id, Product) ->
     Found = gleam@list:any(erlang:element(7, World), fun(Factory) ->
@@ -581,12 +585,12 @@ set_factory_product(World, Player_id, Factory_id, Product) ->
             {{world, erlang:element(2, World), erlang:element(3, World), erlang:element(4, World), erlang:element(5, World), erlang:element(6, World), Factories, erlang:element(8, World), erlang:element(9, World), erlang:element(10, World), erlang:element(11, World), erlang:element(12, World), erlang:element(13, World), erlang:element(14, World)}, {ok, nil}}
     end.
 
--file("src\\game_server.gleam", 330).
+-file("src\\game_server.gleam", 346).
 -spec same_position(position(), position()) -> boolean().
 same_position(A, B) ->
     distance(A, B) =< 1.0.
 
--file("src\\game_server.gleam", 321).
+-file("src\\game_server.gleam", 337).
 -spec owned_destination_at(world(), integer(), float(), float()) -> boolean().
 owned_destination_at(World, Player_id, X, Y) ->
     gleam@list:any(erlang:element(7, World), fun(Factory) ->
@@ -595,24 +599,24 @@ owned_destination_at(World, Player_id, X, Y) ->
         (erlang:element(3, Warehouse) =:= Player_id) andalso same_position(erlang:element(4, Warehouse), {position, X, Y})
     end).
 
--file("src\\game_server.gleam", 315).
+-file("src\\game_server.gleam", 331).
 -spec owned_factory_at(world(), integer(), float(), float()) -> boolean().
 owned_factory_at(World, Player_id, X, Y) ->
     gleam@list:any(erlang:element(7, World), fun(Factory) ->
         (erlang:element(3, Factory) =:= Player_id) andalso same_position(erlang:element(4, Factory), {position, X, Y})
     end).
 
--file("src\\game_server.gleam", 400).
+-file("src\\game_server.gleam", 416).
 -spec validate_coordinate(float()) -> boolean().
 validate_coordinate(Value) ->
     (Value >= (+0.0 - 1000.0)) andalso (Value =< 1000.0).
 
--file("src\\game_server.gleam", 450).
+-file("src\\game_server.gleam", 466).
 -spec player_authorized(world(), integer()) -> boolean().
 player_authorized(World, Player_id) ->
     session_valid(World, Player_id) andalso player_in_started_room(World, Player_id).
 
--file("src\\game_server.gleam", 295).
+-file("src\\game_server.gleam", 311).
 -spec spawn_vehicle(world(), integer(), float(), float(), float(), float(), float()) -> {world(), {ok, nil} | {error, binary()}}.
 spawn_vehicle(World, Player_id, X, Y, Tx, Ty, Speed) ->
     case (((player_authorized(World, Player_id) andalso validate_coordinate(X)) andalso validate_coordinate(Y)) andalso validate_coordinate(Tx)) andalso validate_coordinate(Ty) of
@@ -643,13 +647,13 @@ spawn_vehicle(World, Player_id, X, Y, Tx, Ty, Speed) ->
             end
     end.
 
--file("src\\game_server.gleam", 477).
+-file("src\\game_server.gleam", 493).
 -spec spend(world(), integer(), integer()) -> world().
 spend(World, Player_id, Amount) ->
     Players = gleam@list:map(erlang:element(5, World), fun(Player) ->
         case erlang:element(2, Player) =:= Player_id of
             true ->
-                {player, erlang:element(2, Player), erlang:element(3, Player), erlang:element(4, Player), erlang:element(5, Player) - Amount, erlang:element(6, Player), erlang:element(7, Player), erlang:element(8, Player), erlang:element(9, Player), erlang:element(10, Player)};
+                {player, erlang:element(2, Player), erlang:element(3, Player), erlang:element(4, Player), erlang:element(5, Player), erlang:element(6, Player) - Amount, erlang:element(7, Player), erlang:element(8, Player), erlang:element(9, Player), erlang:element(10, Player), erlang:element(11, Player)};
 
             false ->
                 Player
@@ -657,14 +661,14 @@ spend(World, Player_id, Amount) ->
     end),
     {world, erlang:element(2, World), erlang:element(3, World), erlang:element(4, World), Players, erlang:element(6, World), erlang:element(7, World), erlang:element(8, World), erlang:element(9, World), erlang:element(10, World), erlang:element(11, World), erlang:element(12, World), erlang:element(13, World), erlang:element(14, World)}.
 
--file("src\\game_server.gleam", 421).
+-file("src\\game_server.gleam", 437).
 -spec inside_owned_city(world(), integer(), float(), float()) -> boolean().
 inside_owned_city(World, Player_id, X, Y) ->
     gleam@list:any(erlang:element(6, World), fun(Bank) ->
         (erlang:element(3, Bank) =:= Player_id) andalso (distance(erlang:element(4, Bank), {position, X, Y}) =< 300.0)
     end).
 
--file("src\\game_server.gleam", 290).
+-file("src\\game_server.gleam", 306).
 -spec warehouse_connected(world(), integer(), float(), float()) -> boolean().
 warehouse_connected(World, Player_id, X, Y) ->
     gleam@list:any(erlang:element(6, World), fun(Bank) ->
@@ -673,7 +677,7 @@ warehouse_connected(World, Player_id, X, Y) ->
         (erlang:element(3, Warehouse) =:= Player_id) andalso (distance(erlang:element(4, Warehouse), {position, X, Y}) =< 300.0)
     end).
 
--file("src\\game_server.gleam", 408).
+-file("src\\game_server.gleam", 424).
 -spec all_positions(world()) -> list(position()).
 all_positions(World) ->
     lists:append(gleam@list:map(erlang:element(6, World), fun(Item) ->
@@ -688,14 +692,14 @@ all_positions(World) ->
         erlang:element(4, Item)
     end))))).
 
--file("src\\game_server.gleam", 404).
+-file("src\\game_server.gleam", 420).
 -spec too_close(world(), float(), float()) -> boolean().
 too_close(World, X, Y) ->
     gleam@list:any(all_positions(World), fun(Position) ->
         distance(Position, {position, X, Y}) < 50.0
     end).
 
--file("src\\game_server.gleam", 377).
+-file("src\\game_server.gleam", 393).
 -spec terrain_buildable_cell(float(), float()) -> boolean().
 terrain_buildable_cell(X, Y) ->
     Ax = gleam@float:absolute_value(X),
@@ -709,7 +713,7 @@ terrain_buildable_cell(X, Y) ->
             (Normalized >= 0.08) andalso (Normalized < 0.84)
     end.
 
--file("src\\game_server.gleam", 389).
+-file("src\\game_server.gleam", 405).
 -spec snap_position(float(), float()) -> position().
 snap_position(X, Y) ->
     Cell_x = erlang:trunc((X + 1000.0) / 20.0),
@@ -718,13 +722,13 @@ snap_position(X, Y) ->
     Block_y = Cell_y - (Cell_y rem 2),
     {position, ((erlang:float(Block_x) + 1.0) * 20.0) - 1000.0, ((erlang:float(Block_y) + 1.0) * 20.0) - 1000.0}.
 
--file("src\\game_server.gleam", 369).
+-file("src\\game_server.gleam", 385).
 -spec terrain_buildable_footprint(float(), float()) -> boolean().
 terrain_buildable_footprint(X, Y) ->
     {position, Sx, Sy} = snap_position(X, Y),
     ((terrain_buildable_cell(Sx - 10.0, Sy - 10.0) andalso terrain_buildable_cell(Sx + 10.0, Sy - 10.0)) andalso terrain_buildable_cell(Sx - 10.0, Sy + 10.0)) andalso terrain_buildable_cell(Sx + 10.0, Sy + 10.0).
 
--file("src\\game_server.gleam", 350).
+-file("src\\game_server.gleam", 366).
 -spec validate_position(world(), integer(), float(), float(), integer()) -> {ok, nil} | {error, binary()}.
 validate_position(World, Player_id, X, Y, Cost) ->
     case player_authorized(World, Player_id) of
@@ -759,7 +763,7 @@ validate_position(World, Player_id, X, Y, Cost) ->
             end
     end.
 
--file("src\\game_server.gleam", 261).
+-file("src\\game_server.gleam", 277).
 -spec build_structure(world(), integer(), server@messages:building_type(), float(), float()) -> {world(), {ok, nil} | {error, binary()}}.
 build_structure(World, Player_id, Building, X, Y) ->
     Cost = server@messages:building_cost(Building),
@@ -801,7 +805,7 @@ build_structure(World, Player_id, Building, X, Y) ->
             end
     end.
 
--file("src\\game_server.gleam", 242).
+-file("src\\game_server.gleam", 258).
 -spec build_bank(world(), integer(), float(), float()) -> {world(), {ok, nil} | {error, binary()}}.
 build_bank(World, Player_id, X, Y) ->
     {position, Sx, Sy} = snap_position(X, Y),
@@ -825,34 +829,34 @@ build_bank(World, Player_id, X, Y) ->
             end
     end.
 
--file("src\\game_server.gleam", 452).
+-file("src\\game_server.gleam", 468).
 -spec remove_online(list(integer()), integer()) -> list(integer()).
 remove_online(Ids, Player_id) ->
     gleam@list:filter(Ids, fun(Id) ->
         Id /= Player_id
     end).
 
--file("src\\game_server.gleam", 651).
+-file("src\\game_server.gleam", 671).
 -spec remove_player_from_session(world(), integer()) -> world().
 remove_player_from_session(World, Player_id) ->
     {After_room, _} = leave_room(World, Player_id),
     {world, erlang:element(2, After_room), erlang:element(3, After_room), erlang:element(4, After_room), erlang:element(5, After_room), erlang:element(6, After_room), erlang:element(7, After_room), erlang:element(8, After_room), erlang:element(9, After_room), erlang:element(10, After_room), erlang:element(11, After_room), remove_online(erlang:element(12, After_room), Player_id), erlang:element(13, After_room), erlang:element(14, After_room)}.
 
--file("src\\game_server.gleam", 456).
+-file("src\\game_server.gleam", 472).
 -spec nickname_taken(world(), binary(), integer()) -> boolean().
 nickname_taken(World, Nickname, Except_player_id) ->
     gleam@list:any(erlang:element(5, World), fun(Player) ->
         (erlang:element(2, Player) /= Except_player_id) andalso (string:lowercase(erlang:element(4, Player)) =:= string:lowercase(Nickname))
     end).
 
--file("src\\game_server.gleam", 462).
+-file("src\\game_server.gleam", 478).
 -spec valid_nickname(binary()) -> boolean().
 valid_nickname(Nickname) ->
     Trimmed = gleam@string:trim(Nickname),
     Length = string:length(Trimmed),
     (Length >= 3) andalso (Length =< 24).
 
--file("src\\game_server.gleam", 434).
+-file("src\\game_server.gleam", 450).
 -spec find_player_by_uid(list(player()), binary()) -> gleam@option:option(integer()).
 find_player_by_uid(Players, Uid) ->
     case Players of
@@ -869,7 +873,7 @@ find_player_by_uid(Players, Uid) ->
             end
     end.
 
--file("src\\game_server.gleam", 487).
+-file("src\\game_server.gleam", 503).
 -spec safe_name(binary()) -> binary().
 safe_name(Name) ->
     case gleam@string:trim(Name) of
@@ -880,11 +884,11 @@ safe_name(Name) ->
             gleam@string:slice(Trimmed, 0, 32)
     end.
 
--file("src\\game_server.gleam", 102).
+-file("src\\game_server.gleam", 104).
 -spec handle(message(), world()) -> world().
 handle(Message, World) ->
     case Message of
-        {join_player, Auth_uid, Name, Reply_to} ->
+        {join_player, Auth_uid, Name, Auth_token, Reply_to} ->
             Nickname = safe_name(Name),
             case find_player_by_uid(erlang:element(5, World), Auth_uid) of
                 {some, Id} ->
@@ -904,7 +908,7 @@ handle(Message, World) ->
                                     Players = gleam@list:map(erlang:element(5, World), fun(Player) ->
                                         case erlang:element(2, Player) =:= Id of
                                             true ->
-                                                {player, erlang:element(2, Player), erlang:element(3, Player), Nickname, erlang:element(5, Player), erlang:element(6, Player), erlang:element(7, Player), erlang:element(8, Player), erlang:element(9, Player), erlang:element(10, Player)};
+                                                {player, erlang:element(2, Player), erlang:element(3, Player), Nickname, Auth_token, erlang:element(6, Player), erlang:element(7, Player), erlang:element(8, Player), erlang:element(9, Player), erlang:element(10, Player), erlang:element(11, Player)};
 
                                             false ->
                                                 Player
@@ -927,7 +931,7 @@ handle(Message, World) ->
                                     World;
 
                                 false ->
-                                    Player = {player, erlang:element(4, World), Auth_uid, Nickname, 100000, 0, 0, 0, 0, 0},
+                                    Player = {player, erlang:element(4, World), Auth_uid, Nickname, Auth_token, 100000, 0, 0, 0, 0, 0},
                                     gleam@erlang@process:send(Reply_to, {ok, erlang:element(2, Player)}),
                                     {world, erlang:element(2, World), erlang:element(3, World), erlang:element(4, World) + 1, [Player | erlang:element(5, World)], erlang:element(6, World), erlang:element(7, World), erlang:element(8, World), erlang:element(9, World), erlang:element(10, World), erlang:element(11, World), [erlang:element(2, Player) | erlang:element(12, World)], erlang:element(13, World), erlang:element(14, World)}
                             end
@@ -998,7 +1002,7 @@ handle(Message, World) ->
             World
     end.
 
--file("src\\game_server.gleam", 94).
+-file("src\\game_server.gleam", 96).
 -spec loop(gleam@erlang@process:subject(message()), world()) -> nil.
 loop(Subject, World) ->
     Next_world = case gleam@erlang@process:'receive'(Subject, 50) of
@@ -1010,7 +1014,7 @@ loop(Subject, World) ->
     end,
     loop(Subject, update(Next_world)).
 
--file("src\\game_server.gleam", 80).
+-file("src\\game_server.gleam", 82).
 -spec start() -> gleam@erlang@process:subject(message()).
 start() ->
     Name = gleam_erlang_ffi:new_name(~"zelix_world"),
@@ -1029,34 +1033,34 @@ start() ->
                     file => ~"src\\game_server.gleam",
                     module => ~"game_server",
                     function => ~"start",
-                    line => 84,
+                    line => 86,
                     kind => binary_operator,
                     operator => '==',
                     left => #{
                         kind => expression,
                         value => _value,
-                        start => 3024,
-                        'end' => 3062
+                        start => 3092,
+                        'end' => 3130
                     },
                     right => #{
                         kind => literal,
                         value => _value@1,
-                        start => 3066,
-                        'end' => 3073
+                        start => 3134,
+                        'end' => 3141
                     },
-                    start => 3017,
-                    'end' => 3073,
-                    expression_start => 3024
+                    start => 3085,
+                    'end' => 3141,
+                    expression_start => 3092
                 })
         end,
         loop(Subject, initial_world())
     end),
     gleam@erlang@process:named_subject(Name).
 
--file("src\\game_server.gleam", 757).
+-file("src\\game_server.gleam", 777).
 -spec handle_test_factory(world(), float(), float()) -> world().
 handle_test_factory(World, X, Y) ->
-    Player = {player, 1, ~"test-uid", ~"test", 100000, 0, 0, 0, 0, 0},
+    Player = {player, 1, ~"test-uid", ~"test", ~"", 100000, 0, 0, 0, 0, 0},
     Room = {room, ~"TEST", 1, ~"multiplayer", [1], true},
     World@1 = {world, erlang:element(2, World), erlang:element(3, World), erlang:element(4, World), [Player], erlang:element(6, World), erlang:element(7, World), erlang:element(8, World), erlang:element(9, World), erlang:element(10, World), erlang:element(11, World), [1], [Room], erlang:element(14, World)},
     {World@2, _} = build_bank(World@1, 1, +0.0, +0.0),

@@ -1,5 +1,5 @@
 -module(game_server_os_ffi).
--export([get_env/1, terrain_height/2]).
+-export([get_env/1, read_project_file/1, terrain_height/2]).
 
 get_env(Key) ->
   case os:getenv(binary_to_list(Key)) of
@@ -14,3 +14,9 @@ terrain_height(X, Y) ->
     math:sin(X / 180.0) * 0.45 +
     math:cos(Y / 230.0) * 0.35 +
     math:sin((X + Y) / 310.0) * 0.20.
+
+read_project_file(Name) ->
+  case file:read_file(binary_to_list(Name)) of
+    {ok, Value} -> {ok, Value};
+    {error, _} -> {error, nil}
+  end.

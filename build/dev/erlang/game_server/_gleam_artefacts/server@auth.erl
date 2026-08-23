@@ -1,37 +1,76 @@
 -module(server@auth).
 -compile([no_auto_import, nowarn_ignored, nowarn_unused_vars, nowarn_unused_function, nowarn_nomatch, inline]).
--export([verify_identity/1, verify_token/1, handle/2]).
--export_type([auth_result/0, credentials/0]).
+-export([decode_identity_response/1, verify_identity/1, verify_token/1, handle/2]).
+-export_type([auth_result/0, firebase_user/0, credentials/0]).
 
 -type auth_result() :: {auth_result, boolean(), binary(), binary(), binary()}.
 
+-type firebase_user() :: {firebase_user, binary(), gleam@option:option(binary())}.
+
 -type credentials() :: {credentials, binary(), binary(), gleam@option:option(binary())}.
 
--file("src\\server\\auth.gleam", 146).
--spec extract_optional(binary(), binary()) -> gleam@option:option(binary()).
-extract_optional(Text, Field) ->
-    case gleam@json:parse(Text, begin
-        gleam@dynamic@decode:subfield([Field], {decoder, fun gleam@dynamic@decode:decode_string/1}, fun(Value) ->
-            gleam@dynamic@decode:success(Value)
+-file("src\\server\\auth.gleam", 54).
+-spec firebase_user_decoder() -> gleam@dynamic@decode:decoder(firebase_user()).
+firebase_user_decoder() ->
+    gleam@dynamic@decode:field(~"localId", {decoder, fun gleam@dynamic@decode:decode_string/1}, fun(Local_id) ->
+        gleam@dynamic@decode:optional_field(~"displayName", none, gleam@dynamic@decode:optional({decoder, fun gleam@dynamic@decode:decode_string/1}), fun(Display_name) ->
+            gleam@dynamic@decode:success({firebase_user, Local_id, Display_name})
         end)
-    end) of
-        {ok, Value} ->
-            {some, Value};
+    end).
+
+-file("src\\server\\auth.gleam", 32).
+-spec decode_identity_response(binary()) -> {ok, {binary(), binary()}} | {error, binary()}.
+decode_identity_response(Text) ->
+    Decoder = begin
+        gleam@dynamic@decode:field(~"users", gleam@dynamic@decode:list(firebase_user_decoder()), fun(Users) ->
+            gleam@dynamic@decode:success(Users)
+        end)
+    end,
+    case gleam@json:parse(Text, Decoder) of
+        {ok, [User | _]} ->
+            Nickname = begin
+                _pipe = erlang:element(3, User),
+                _pipe@1 = gleam@option:unwrap(_pipe, ~""),
+                gleam@string:trim(_pipe@1)
+            end,
+            case (string:length(Nickname) >= 3) andalso (string:length(Nickname) =< 24) of
+                true ->
+                    {ok, {erlang:element(2, User), Nickname}};
+
+                false ->
+                    {error, ~"Firebase account does not have a valid nickname."}
+            end;
+
+        {ok, []} ->
+            {error, ~"Firebase token did not contain a user."};
 
         {error, _} ->
-            none
+            {error, ~"Firebase token response was malformed."}
     end.
 
--file("src\\server\\auth.gleam", 74).
--spec api_key() -> binary().
-api_key() ->
-    _pipe = game_server_os_ffi:get_env(~"FIREBASE_WEB_API_KEY"),
-    gleam@result:unwrap(_pipe, ~"").
+-file("src\\server\\auth.gleam", 245).
+-spec firebase_error_message(integer(), binary()) -> binary().
+firebase_error_message(Code, Body) ->
+    case gleam@json:parse(Body, begin
+        gleam@dynamic@decode:field(~"error", begin
+            gleam@dynamic@decode:field(~"message", {decoder, fun gleam@dynamic@decode:decode_string/1}, fun(Inner) ->
+                gleam@dynamic@decode:success(Inner)
+            end)
+        end, fun(Message) ->
+            gleam@dynamic@decode:success(Message)
+        end)
+    end) of
+        {ok, Message} ->
+            <<<<<<"Firebase request failed ("/utf8, (erlang:integer_to_binary(Code))/binary>>/binary, "): "/utf8>>/binary, Message/binary>>;
 
--file("src\\server\\auth.gleam", 119).
--spec firebase_post(binary(), binary()) -> {ok, binary()} | {error, binary()}.
-firebase_post(Path, Body) ->
-    Url = <<<<<<"https://identitytoolkit.googleapis.com/v1"/utf8, Path/binary>>/binary, "?key="/utf8>>/binary, (api_key())/binary>>,
+        {error, _} ->
+            <<<<"Firebase request failed ("/utf8, (erlang:integer_to_binary(Code))/binary>>/binary, ")."/utf8>>
+    end.
+
+-file("src\\server\\auth.gleam", 228).
+-spec firebase_post(binary(), binary(), binary()) -> {ok, binary()} | {error, binary()}.
+firebase_post(Api_key, Path, Body) ->
+    Url = <<<<<<"https://identitytoolkit.googleapis.com/v1"/utf8, Path/binary>>/binary, "?key="/utf8>>/binary, Api_key/binary>>,
     case gleam@http@request:to(Url) of
         {ok, Req} ->
             Req@1 = begin
@@ -47,7 +86,7 @@ firebase_post(Path, Body) ->
                             {ok, erlang:element(4, Response)};
 
                         Code ->
-                            {error, <<<<<<"Firebase request failed ("/utf8, (erlang:integer_to_binary(Code))/binary>>/binary, "): "/utf8>>/binary, (erlang:element(4, Response))/binary>>}
+                            {error, firebase_error_message(Code, erlang:element(4, Response))}
                     end;
 
                 {error, Error} ->
@@ -61,56 +100,37 @@ firebase_post(Path, Body) ->
                 file => ~"src\\server\\auth.gleam",
                 module => ~"server/auth",
                 function => ~"firebase_post",
-                line => 121,
+                line => 230,
                 value => _value,
-                start => 4593,
-                'end' => 4629,
-                pattern_start => 4604,
-                pattern_end => 4611
+                start => 8240,
+                'end' => 8276,
+                pattern_start => 8251,
+                pattern_end => 8258
             })
     end.
 
--file("src\\server\\auth.gleam", 17).
+-file("src\\server\\auth.gleam", 19).
 -spec verify_identity(binary()) -> {ok, {binary(), binary()}} | {error, binary()}.
 verify_identity(Token) ->
-    case api_key() of
-        ~"" ->
-            {error, ~"FIREBASE_WEB_API_KEY is not configured on the server."};
+    case server@firebase_config:firebase_config() of
+        {error, Message} ->
+            {error, Message};
 
-        _ ->
+        {ok, Config} ->
             Body = begin
                 _pipe = gleam@json:object([{~"idToken", gleam@json:string(Token)}]),
                 gleam@json:to_string(_pipe)
             end,
-            case firebase_post(~"/accounts:lookup", Body) of
+            case firebase_post(erlang:element(2, Config), ~"/accounts:lookup", Body) of
                 {ok, Text} ->
-                    Uid = extract_optional(Text, ~"localId"),
-                    Nickname = extract_optional(Text, ~"displayName"),
-                    case Uid of
-                        {some, Id} ->
-                            Name = begin
-                                _pipe@1 = Nickname,
-                                _pipe@2 = gleam@option:unwrap(_pipe@1, ~""),
-                                gleam@string:trim(_pipe@2)
-                            end,
-                            case (string:length(Name) >= 3) andalso (string:length(Name) =< 24) of
-                                true ->
-                                    {ok, {Id, Name}};
+                    decode_identity_response(Text);
 
-                                false ->
-                                    {error, ~"Firebase account does not have a valid nickname."}
-                            end;
-
-                        none ->
-                            {error, ~"Firebase token did not contain a user id."}
-                    end;
-
-                {error, Message} ->
-                    {error, Message}
+                {error, Message@1} ->
+                    {error, Message@1}
             end
     end.
 
--file("src\\server\\auth.gleam", 43).
+-file("src\\server\\auth.gleam", 65).
 -spec verify_token(binary()) -> {ok, binary()} | {error, binary()}.
 verify_token(Token) ->
     case verify_identity(Token) of
@@ -121,56 +141,87 @@ verify_token(Token) ->
             {error, Message}
     end.
 
--file("src\\server\\auth.gleam", 169).
+-file("src\\server\\auth.gleam", 314).
 -spec failed(binary()) -> auth_result().
 failed(Message) ->
     {auth_result, false, Message, ~"", ~""}.
 
--file("src\\server\\auth.gleam", 145).
+-file("src\\server\\auth.gleam", 287).
+-spec extract_optional(binary(), binary()) -> gleam@option:option(binary()).
+extract_optional(Text, Field) ->
+    case gleam@json:parse(Text, begin
+        gleam@dynamic@decode:subfield([Field], {decoder, fun gleam@dynamic@decode:decode_string/1}, fun(Value) ->
+            gleam@dynamic@decode:success(Value)
+        end)
+    end) of
+        {ok, Value} ->
+            {some, Value};
+
+        {error, _} ->
+            none
+    end.
+
+-file("src\\server\\auth.gleam", 283).
 -spec extract(binary(), binary()) -> binary().
 extract(Text, Field) ->
     _pipe = extract_optional(Text, Field),
     gleam@option:unwrap(_pipe, ~"").
 
--file("src\\server\\auth.gleam", 95).
+-file("src\\server\\auth.gleam", 168).
 -spec register(binary(), binary(), binary()) -> auth_result().
 register(Email, Password, Nickname) ->
-    case api_key() of
-        ~"" ->
-            failed(~"FIREBASE_WEB_API_KEY is not configured on the server.");
+    case server@firebase_config:firebase_config() of
+        {error, Message} ->
+            failed(Message);
 
-        _ ->
+        {ok, Config} ->
             Body = begin
                 _pipe = gleam@json:object([{~"email", gleam@json:string(Email)}, {~"password", gleam@json:string(Password)}, {~"returnSecureToken", gleam@json:bool(true)}]),
                 gleam@json:to_string(_pipe)
             end,
-            case firebase_post(~"/accounts:signUp", Body) of
+            case firebase_post(erlang:element(2, Config), ~"/accounts:signUp", Body) of
                 {ok, Text} ->
                     Token = extract(Text, ~"idToken"),
-                    Update = begin
-                        _pipe@1 = gleam@json:object([{~"idToken", gleam@json:string(Token)}, {~"displayName", gleam@json:string(Nickname)}, {~"returnSecureToken", gleam@json:bool(true)}]),
-                        gleam@json:to_string(_pipe@1)
-                    end,
-                    case firebase_post(~"/accounts:update", Update) of
-                        {ok, Updated} ->
-                            {auth_result, true, <<<<"Account created. Welcome, "/utf8, Nickname/binary>>/binary, "."/utf8>>, begin
-                                _pipe@2 = extract_optional(Updated, ~"displayName"),
-                                gleam@option:unwrap(_pipe@2, Nickname)
-                            end, begin
-                                _pipe@3 = extract_optional(Updated, ~"idToken"),
-                                gleam@option:unwrap(_pipe@3, Token)
-                            end};
+                    case Token =:= ~"" of
+                        true ->
+                            failed(~"Firebase registration did not return an ID token.");
 
-                        {error, _} ->
-                            {auth_result, true, <<<<"Account created. Welcome, "/utf8, Nickname/binary>>/binary, "."/utf8>>, Nickname, Token}
+                        false ->
+                            Update = begin
+                                _pipe@1 = gleam@json:object([{~"idToken", gleam@json:string(Token)}, {~"displayName", gleam@json:string(Nickname)}, {~"returnSecureToken", gleam@json:bool(true)}]),
+                                gleam@json:to_string(_pipe@1)
+                            end,
+                            case firebase_post(erlang:element(2, Config), ~"/accounts:update", Update) of
+                                {ok, Updated} ->
+                                    Final_token = begin
+                                        _pipe@2 = extract_optional(Updated, ~"idToken"),
+                                        gleam@option:unwrap(_pipe@2, Token)
+                                    end,
+                                    Final_nickname = begin
+                                        _pipe@3 = extract_optional(Updated, ~"displayName"),
+                                        _pipe@4 = gleam@option:unwrap(_pipe@3, Nickname),
+                                        gleam@string:trim(_pipe@4)
+                                    end,
+                                    case (string:length(Final_nickname) >= 3) andalso (string:length(Final_nickname) =< 24) of
+                                        true ->
+                                            server@firestore:save_player(Final_token, extract(Text, ~"localId"), Final_nickname),
+                                            {auth_result, true, <<<<"Account created. Welcome, "/utf8, Final_nickname/binary>>/binary, "."/utf8>>, Final_nickname, Final_token};
+
+                                        false ->
+                                            failed(~"Firebase created the account but did not store a valid nickname.")
+                                    end;
+
+                                {error, Message@1} ->
+                                    failed(<<"Account creation succeeded, but nickname setup failed: "/utf8, Message@1/binary>>)
+                            end
                     end;
 
-                {error, Message} ->
-                    failed(Message)
+                {error, Message@2} ->
+                    failed(Message@2)
             end
     end.
 
--file("src\\server\\auth.gleam", 156).
+-file("src\\server\\auth.gleam", 297).
 -spec valid_register_input(binary(), binary(), binary()) -> {ok, nil} | {error, binary()}.
 valid_register_input(Email, Password, Nickname) ->
     case string:length(gleam@string:trim(Email)) >= 3 of
@@ -193,33 +244,91 @@ valid_register_input(Email, Password, Nickname) ->
             end
     end.
 
--file("src\\server\\auth.gleam", 76).
--spec login(binary(), binary()) -> auth_result().
-login(Email, Password) ->
-    case api_key() of
-        ~"" ->
-            failed(~"FIREBASE_WEB_API_KEY is not configured on the server.");
+-file("src\\server\\auth.gleam", 258).
+-spec fallback_nickname(binary()) -> binary().
+fallback_nickname(Email) ->
+    Local = case gleam@string:split(Email, ~"@") of
+        [First | _] ->
+            gleam@string:trim(First);
 
         _ ->
+            ~""
+    end,
+    case (string:length(Local) >= 3) andalso (string:length(Local) =< 24) of
+        true ->
+            Local;
+
+        false ->
+            ~"Player"
+    end.
+
+-file("src\\server\\auth.gleam", 98).
+-spec login(binary(), binary()) -> auth_result().
+login(Email, Password) ->
+    case server@firebase_config:firebase_config() of
+        {error, Message} ->
+            failed(Message);
+
+        {ok, Config} ->
             Body = begin
                 _pipe = gleam@json:object([{~"email", gleam@json:string(Email)}, {~"password", gleam@json:string(Password)}, {~"returnSecureToken", gleam@json:bool(true)}]),
                 gleam@json:to_string(_pipe)
             end,
-            case firebase_post(~"/accounts:signInWithPassword", Body) of
+            case firebase_post(erlang:element(2, Config), ~"/accounts:signInWithPassword", Body) of
                 {ok, Text} ->
                     Token = extract(Text, ~"idToken"),
-                    Nickname = begin
-                        _pipe@1 = extract_optional(Text, ~"displayName"),
-                        gleam@option:unwrap(_pipe@1, Email)
-                    end,
-                    {auth_result, true, <<<<"Welcome back, "/utf8, Nickname/binary>>/binary, "."/utf8>>, Nickname, Token};
+                    case Token =:= ~"" of
+                        true ->
+                            failed(~"Firebase login did not return an ID token.");
 
-                {error, Message} ->
-                    failed(Message)
+                        false ->
+                            Nickname = begin
+                                _pipe@1 = extract_optional(Text, ~"displayName"),
+                                _pipe@2 = gleam@option:unwrap(_pipe@1, ~""),
+                                gleam@string:trim(_pipe@2)
+                            end,
+                            Effective = case (string:length(Nickname) >= 3) andalso (string:length(Nickname) =< 24) of
+                                true ->
+                                    Nickname;
+
+                                false ->
+                                    fallback_nickname(Email)
+                            end,
+                            case Nickname =:= Effective of
+                                true ->
+                                    server@firestore:save_player(Token, extract(Text, ~"localId"), Effective),
+                                    {auth_result, true, <<<<"Welcome back, "/utf8, Effective/binary>>/binary, "."/utf8>>, Effective, Token};
+
+                                false ->
+                                    Update = begin
+                                        _pipe@3 = gleam@json:object([{~"idToken", gleam@json:string(Token)}, {~"displayName", gleam@json:string(Effective)}, {~"returnSecureToken", gleam@json:bool(true)}]),
+                                        gleam@json:to_string(_pipe@3)
+                                    end,
+                                    case firebase_post(erlang:element(2, Config), ~"/accounts:update", Update) of
+                                        {ok, Updated} ->
+                                            Final_token = begin
+                                                _pipe@4 = extract_optional(Updated, ~"idToken"),
+                                                gleam@option:unwrap(_pipe@4, Token)
+                                            end,
+                                            Final_nickname = begin
+                                                _pipe@5 = extract_optional(Updated, ~"displayName"),
+                                                gleam@option:unwrap(_pipe@5, Effective)
+                                            end,
+                                            server@firestore:save_player(Final_token, extract(Text, ~"localId"), Final_nickname),
+                                            {auth_result, true, <<<<"Welcome back, "/utf8, Final_nickname/binary>>/binary, "."/utf8>>, Final_nickname, Final_token};
+
+                                        {error, _} ->
+                                            failed(~"Your account has no valid nickname and it could not be repaired automatically.")
+                                    end
+                            end
+                    end;
+
+                {error, Message@1} ->
+                    failed(Message@1)
             end
     end.
 
--file("src\\server\\auth.gleam", 132).
+-file("src\\server\\auth.gleam", 269).
 -spec decode_credentials(binary()) -> {ok, credentials()} | {error, binary()}.
 decode_credentials(Text) ->
     Decoder = begin
@@ -239,7 +348,7 @@ decode_credentials(Text) ->
             {error, ~"Invalid auth request."}
     end.
 
--file("src\\server\\auth.gleam", 49).
+-file("src\\server\\auth.gleam", 76).
 -spec handle(binary(), bitstring()) -> auth_result().
 handle(Path, Body) ->
     case gleam@bit_array:to_string(Body) of

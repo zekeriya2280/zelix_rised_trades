@@ -16,3 +16,4 @@
 - Bound the server to `0.0.0.0:8765` for remote clients; production TLS should be terminated by a reverse proxy.
 - Added `README.md`, `.gitignore`, and basic Gleam tests.
 - Removed all `build/` and `game_client/target/` generated artifacts from the distributable ZIP.
+- Added Firestore persistence: player registrations are saved to the `players` collection (keyed by `localId`) and created rooms to the `rooms` collection (keyed by room code). Writes run in a background process so the game loop is never blocked. Configuration now also reads the Firebase project id (`projectId` / `project_info.project_id`).

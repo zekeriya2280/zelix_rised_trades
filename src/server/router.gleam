@@ -61,7 +61,7 @@ fn handle_join(state: WsState, connection: mist.WebsocketConnection, token: Stri
         Error(_) -> send_and_continue(state, connection, messages.ServerError("Invalid authentication token."))
         Ok(#(uid, nickname)) -> {
           let reply = process.new_subject()
-          process.send(state.world, game_server.JoinPlayer(uid, nickname, reply))
+          process.send(state.world, game_server.JoinPlayer(uid, nickname, token, reply))
           case process.receive(reply, within: 1000) {
             Ok(Ok(player_id)) -> {
               let new_state = WsState(state.world, option.Some(player_id))

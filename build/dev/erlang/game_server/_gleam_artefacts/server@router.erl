@@ -324,7 +324,7 @@ handle_join(State, Connection, Token) ->
 
                         {ok, {Uid, Nickname}} ->
                             Reply = gleam@erlang@process:new_subject(),
-                            gleam@erlang@process:send(erlang:element(2, State), {join_player, Uid, Nickname, Reply}),
+                            gleam@erlang@process:send(erlang:element(2, State), {join_player, Uid, Nickname, Token, Reply}),
                             case gleam@erlang@process:'receive'(Reply, 1000) of
                                 {ok, {ok, Player_id}} ->
                                     New_state = {ws_state, erlang:element(2, State), {some, Player_id}},
