@@ -52,6 +52,7 @@ pub enum LobbyPanel {
     #[default]
     Choice,
     CreateRoom,
+    WaitingRoom,
     EnterRoom,
 }
 
@@ -98,6 +99,7 @@ pub struct FrontendState {
     pub active_lobby_mode: LobbyMode,
     pub lobby_panel: LobbyPanel,
     pub current_room: Option<String>,
+    pub settings_return: Screen,
 }
 
 impl Default for FrontendState {
@@ -117,6 +119,7 @@ impl Default for FrontendState {
             active_lobby_mode: LobbyMode::Multiplayer,
             lobby_panel: LobbyPanel::Choice,
             current_room: None,
+            settings_return: Screen::Intro,
         }
     }
 }
@@ -135,9 +138,8 @@ struct MessageLabel;
 #[derive(Component)]
 struct LobbyMessageLabel;
 
-/// Marks one of the three stacked lobby sub-panels (Choice / CreateRoom /
-/// EnterRoom). `sync_lobby_panel_system` toggles visibility based on the
-/// currently selected `LobbyPanel`.
+/// Marks one of the mutually exclusive Online sub-panels. Only one of Choice,
+/// CreateRoom, WaitingRoom or EnterRoom is visible at a time.
 #[derive(Component)]
 struct LobbySubPanel {
     kind: LobbyPanel,
@@ -153,6 +155,9 @@ struct ModeOption {
 /// The container that hosts the dynamic list of rooms on the Enter Room panel.
 #[derive(Component)]
 struct RoomList;
+
+#[derive(Component)]
+struct RoomDetailsLabel;
 
 /// A selectable row for an existing room returned by the server on the
 /// Enter Room panel. Clicking it fills the room-code field.
@@ -221,7 +226,6 @@ impl Plugin for FrontendPlugin {
                 Update,
                 (
                     sync_screen_visibility_system,
-                    sync_lobby_panel_system,
                     focus_field_system,
                     screen_button_system,
                     keyboard_input_system,
@@ -347,38 +351,50 @@ fn spawn_intro(commands: &mut Commands) {
 }
 
 fn spawn_lobby(commands: &mut Commands) {
-    // Lobby starts on the choice menu. From there the player picks Create Room
-    // or Enter Room, makes a selection in the chosen panel, then confirms.
-    spawn_lobby_panel(commands, LobbyPanel::Choice, "Lobby", |l| {
+    // Online main panel: exactly one active sub-panel at a time.
+    spawn_lobby_panel(commands, LobbyPanel::Choice, "Online", |l| {
         spawn_paragraph(
             l,
-            "Create a new room to host, or enter an existing one. Rooms cap at 5 players.",
+            "Create a room or enter an existing room. Rooms support up to 5 players.",
             MUTED,
         );
         spawn_button(l, "Create Room", Action::LobbySelectCreate);
         spawn_button(l, "Enter Room", Action::LobbySelectEnter);
-        spawn_button(l, "Start game (host only)", Action::LobbyStart);
-        spawn_button(l, "Leave room", Action::LobbyLeave);
-        spawn_button(l, "Back to Intro", Action::LobbyBack);
+        spawn_button(l, "Settings", Action::IntroSettings);
+        spawn_button(l, "Main Menu", Action::LobbyBack);
         l.spawn((
-            Text::new("Server room status appears here. Pick a panel above to create or join."),
+            Text::new("Choose an action above."),
             TextFont { font_size: FontSize::Px(14.0), ..default() },
             TextColor(MUTED),
             LobbyMessageLabel,
         ));
     });
 
-    // Create Room: pick a game mode first, then confirm.
-    spawn_lobby_panel(commands, LobbyPanel::CreateRoom, "Lobby · Create Room", |l| {
+    // Create Room is only the setup/confirmation screen. The waiting room is a
+    // separate panel that appears only after the server successfully creates it.
+    spawn_lobby_panel(commands, LobbyPanel::CreateRoom, "Online · Create Room", |l| {
         spawn_paragraph(
             l,
-            "Select a game mode, then press Create Room. Rooms hold up to 5 players.",
+            "Create a room and then wait here for players to join. Maximum 5 players.",
             MUTED,
         );
-        spawn_mode_option(l, "Multiplayer", LobbyMode::Multiplayer);
+        spawn_paragraph(l, "Room ID: generated after Create Room", TEXT);
+        spawn_paragraph(l, "Players: 1 / 5", TEXT);
         spawn_mode_option(l, "Online", LobbyMode::Online);
         spawn_button(l, "Create Room", Action::LobbyCreate);
-        spawn_button(l, "← Back to lobby menu", Action::LobbySelectChoice);
+        spawn_button(l, "← Back to Online", Action::LobbySelectChoice);
+    });
+
+    // Waiting room: shown only after room creation/join succeeds.
+    spawn_lobby_panel(commands, LobbyPanel::WaitingRoom, "Online · Waiting Room", |l| {
+        l.spawn((
+            Text::new("Waiting for room data..."),
+            TextFont { font_size: FontSize::Px(17.0), ..default() },
+            TextColor(TEXT),
+            RoomDetailsLabel,
+        ));
+        spawn_button(l, "Start Game (Host)", Action::LobbyStart);
+        spawn_button(l, "Leave Room", Action::LobbyLeave);
     });
 
     // Enter Room: select an existing room (refreshed from the server) or type a
@@ -399,8 +415,9 @@ fn spawn_lobby(commands: &mut Commands) {
             RoomList,
         ));
         spawn_hint(l, "Rooms listed above are refreshed from the server.");
-        spawn_button(l, "Enter game", Action::LobbyJoin);
-        spawn_button(l, "← Back to lobby menu", Action::LobbySelectChoice);
+        spawn_button(l, "Enter Game", Action::LobbyJoin);
+        spawn_button(l, "Leave Room", Action::LobbyLeave);
+        spawn_button(l, "← Back to Online", Action::LobbySelectChoice);
     });
 }
 /// Builds one of the three stacked lobby panels. Each panel is its own overlay
@@ -662,28 +679,18 @@ fn focus_field_system(
 
 fn sync_screen_visibility_system(
     state: Res<FrontendState>,
-    mut query: Query<(&FrontendRoot, &mut Visibility)>,
+    mut query: Query<(
+        &FrontendRoot,
+        Option<&LobbySubPanel>,
+        &mut Visibility,
+    )>,
 ) {
-    for (root, mut visibility) in &mut query {
-        *visibility = if root.screen == state.screen {
-            Visibility::Visible
-        } else {
-            Visibility::Hidden
-        };
-    }
-}
-/// Shows only the currently selected lobby sub-panel (and only while the Lobby
-/// screen is active). When not on the Lobby screen the generic
-/// `sync_screen_visibility_system` has already hidden every lobby root.
-fn sync_lobby_panel_system(
-    state: Res<FrontendState>,
-    mut query: Query<(&LobbySubPanel, &mut Visibility)>,
-) {
-    if state.screen != Screen::Lobby {
-        return;
-    }
-    for (sub, mut visibility) in &mut query {
-        *visibility = if sub.kind == state.lobby_panel {
+    for (root, lobby_panel, mut visibility) in &mut query {
+        let screen_matches = root.screen == state.screen;
+        let panel_matches = lobby_panel
+            .map(|panel| panel.kind == state.lobby_panel)
+            .unwrap_or(true);
+        *visibility = if screen_matches && panel_matches {
             Visibility::Visible
         } else {
             Visibility::Hidden
@@ -828,6 +835,15 @@ fn refresh_status_texts_system(
             Without<LobbyMessageLabel>,
         ),
     >,
+    mut room_details: Query<
+        &mut Text,
+        (
+            With<RoomDetailsLabel>,
+            Without<MessageLabel>,
+            Without<LobbyMessageLabel>,
+            Without<SettingsMessageLabel>,
+        ),
+    >,
 ) {
     if let Ok(mut text) = message.single_mut() {
         let mut body = state.message.clone();
@@ -865,6 +881,32 @@ fn refresh_status_texts_system(
             body.push_str(&state.lobby_message);
         }
         *text = Text::new(body);
+    }
+
+    // Keep the waiting-room summary synchronized with the authoritative lobby state.
+    if let Ok(mut text) = room_details.single_mut() {
+        if let Some(room_id) = state.current_room.as_ref() {
+            if let Some(room) = lobby.rooms.iter().find(|room| &room.id == room_id) {
+                let role = if auth.current_user.as_ref().map(|u| u.nickname.as_str()) == Some(room.host.as_str()) {
+                    "Host"
+                } else {
+                    "Player"
+                };
+                *text = Text::new(format!(
+                    "Room ID: {}\nPlayers: {} / {}\nHost: {}\nRole: {}\nStatus: {}",
+                    room.id,
+                    room.players.len(),
+                    room.max_players,
+                    room.host,
+                    role,
+                    if room.started { "Starting" } else { "Waiting for players" },
+                ));
+            } else {
+                *text = Text::new(format!("Room ID: {}\nWaiting for server...", room_id));
+            }
+        } else {
+            *text = Text::new("Room ID: —\nPlayers: — / 5\nCreate or join a room to continue.");
+        }
     }
 
     if let Ok(mut text) = settings_message.single_mut() {
@@ -1055,7 +1097,7 @@ fn screen_button_system(
                 state.screen = Screen::Lobby;
                 state.lobby_panel = LobbyPanel::Choice;
                 state.active_lobby_mode = LobbyMode::Multiplayer;
-                state.active_field = Some(AuthField::RoomCode);
+                state.active_field = None;
                 state.lobby_message = String::from("Multiplayer lobby ready.");
                 game.paused = true;
             }
@@ -1063,11 +1105,12 @@ fn screen_button_system(
                 state.screen = Screen::Lobby;
                 state.lobby_panel = LobbyPanel::Choice;
                 state.active_lobby_mode = LobbyMode::Online;
-                state.active_field = Some(AuthField::RoomCode);
+                state.active_field = None;
                 state.lobby_message = String::from("Online room lobby ready.");
                 game.paused = true;
             }
             Action::IntroSettings => {
+                state.settings_return = state.screen;
                 state.screen = Screen::Settings;
                 state.active_field = None;
                 state.settings_message = String::from("Graphics: optimal | Input: keyboard/mouse | Network: ready for backend.");
@@ -1078,21 +1121,26 @@ fn screen_button_system(
             }
             Action::LobbySelectCreate => {
                 state.lobby_panel = LobbyPanel::CreateRoom;
-                state.active_lobby_mode = LobbyMode::Multiplayer;
-                state.active_field = Some(AuthField::RoomCode);
-                state.lobby_message = String::from("Select a game mode, then Create Room.");
+                state.active_lobby_mode = LobbyMode::Online;
+                state.active_field = None;
+                state.current_room = None;
+                state.room_code.clear();
+                state.lobby_message = String::from("Set up the room, then press Create Room.");
                 game.paused = true;
             }
             Action::LobbySelectEnter => {
                 state.lobby_panel = LobbyPanel::EnterRoom;
                 state.active_field = Some(AuthField::RoomCode);
+                state.current_room = None;
                 state.lobby_message = String::from("Select a room or type its code, then Enter.");
                 game.paused = true;
             }
             Action::LobbySelectChoice => {
                 state.lobby_panel = LobbyPanel::Choice;
-                state.active_field = Some(AuthField::RoomCode);
-                state.lobby_message = String::from("Choose Create Room or Enter Room.");
+                state.current_room = None;
+                state.room_code.clear();
+                state.active_field = None;
+                state.lobby_message = String::from("Choose Create Room, Enter Room, Settings, or Main Menu.");
                 game.paused = true;
             }
             Action::LobbyCreate => {
@@ -1108,7 +1156,12 @@ fn screen_button_system(
                 }
             }
             Action::LobbyBack => {
+                if state.current_room.is_some() {
+                    send_lobby_command(&mut state, &auth, &network, crate::network::protocol::ClientMessage::LobbyLeave);
+                }
                 state.screen = Screen::Intro;
+                state.lobby_panel = LobbyPanel::Choice;
+                state.current_room = None;
                 state.active_field = None;
                 state.lobby_message.clear();
                 game.paused = true;
@@ -1123,7 +1176,10 @@ fn screen_button_system(
                 game.paused = true;
             }
             Action::SettingsBack => {
-                state.screen = Screen::Intro;
+                state.screen = state.settings_return;
+                if state.screen == Screen::Lobby {
+                    state.lobby_panel = LobbyPanel::Choice;
+                }
                 state.active_field = None;
                 game.paused = true;
             }

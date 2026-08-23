@@ -191,9 +191,20 @@ fn failed(message: String) -> AuthResponse { AuthResponse { ok: false, message, 
 pub fn server_base() -> String {
     #[cfg(not(target_arch = "wasm32"))]
     {
+        if let Some(value) = option_env!("GAME_SERVER_URL") {
+            if !value.trim().is_empty() {
+                return value.trim().trim_end_matches('/').to_string();
+            }
+        }
         if let Ok(value) = std::env::var("GAME_SERVER_URL") { if !value.trim().is_empty() { return value.trim().trim_end_matches('/').to_string(); } }
-        if let Ok(text) = std::fs::read_to_string("game_config.json") {
-            if let Ok(config) = serde_json::from_str::<GameClientConfig>(&text) { if !config.server_url.trim().is_empty() { return config.server_url.trim().trim_end_matches('/').to_string(); } }
+        for path in ["game_config.json", "assets/game_config.json"] {
+            if let Ok(text) = std::fs::read_to_string(path) {
+                if let Ok(config) = serde_json::from_str::<GameClientConfig>(&text) {
+                    if !config.server_url.trim().is_empty() {
+                        return config.server_url.trim().trim_end_matches('/').to_string();
+                    }
+                }
+            }
         }
         return "http://127.0.0.1:8765".into();
     }

@@ -15,4 +15,4 @@ Firebase configuration discovery on the server:
 
 `google-services.json` is the Android app artifact; Web Firebase uses a config object. The server extracts the API key without hardcoding it.
 
-Generated `build/` and `game_client/target/` directories are intentionally omitted from source ZIPs and are recreated by builds.
+Generated `build/`, `game_client/target/`, Android `jniLibs/`, and APK outputs are intentionally omitted from source ZIPs and are recreated by builds.

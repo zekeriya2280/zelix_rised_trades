@@ -19,7 +19,7 @@ pub fn save_player(auth_token: String, uid: String, nickname: String) -> Nil {
   spawn_write(auth_token, "players", uid, player_fields(uid, nickname))
 }
 
-/// Persist a newly created room to the Firestore `rooms` collection.
+/// Best-effort room metadata write. The authoritative online room state remains in the server process; this write is informational/account metadata only.
 pub fn save_room(
   auth_token: String,
   code: String,

@@ -1,7 +1,7 @@
 -module(server@messages).
 -compile([no_auto_import, nowarn_ignored, nowarn_unused_vars, nowarn_unused_function, nowarn_nomatch, inline]).
 -export([building_cost/1, product_value/1, product_json/1, product_from_string/1, encode_server/1, decode_client/1]).
--export_type([building_type/0, product_type/0, client_message/0, server_message/0]).
+-export_type([building_type/0, product_type/0, client_message/0, room_summary/0, server_message/0]).
 
 -type building_type() :: gatherer | factory | warehouse | farm.
 
@@ -9,9 +9,11 @@
 
 -type client_message() :: {join, binary()} | ping | request_snapshot | {lobby_create, binary()} | {lobby_join, binary()} | lobby_start | lobby_leave | {build_bank, float(), float()} | {build_structure, building_type(), float(), float()} | {spawn_vehicle, float(), float(), float(), float(), float()} | {set_factory_product, integer(), product_type()}.
 
--type server_message() :: {welcome, integer()} | pong | {lobby_state, gleam@option:option(binary()), boolean(), boolean(), binary(), binary(), list(binary()), integer()} | {world_snapshot, binary()} | {server_error, binary()} | {command_rejected, binary()}.
+-type room_summary() :: {room_summary, binary(), binary(), binary(), list(binary()), integer(), boolean()}.
 
--file("src\\server\\messages.gleam", 31).
+-type server_message() :: {welcome, integer()} | pong | {lobby_state, gleam@option:option(binary()), boolean(), boolean(), binary(), binary(), list(binary()), integer(), list(room_summary())} | {world_snapshot, binary()} | {server_error, binary()} | {command_rejected, binary()}.
+
+-file("src\\server\\messages.gleam", 35).
 -spec building_cost(building_type()) -> integer().
 building_cost(Building) ->
     case Building of
@@ -28,7 +30,7 @@ building_cost(Building) ->
             12000
     end.
 
--file("src\\server\\messages.gleam", 35).
+-file("src\\server\\messages.gleam", 39).
 -spec product_value(product_type()) -> integer().
 product_value(Product) ->
     case Product of
@@ -48,7 +50,7 @@ product_value(Product) ->
             70
     end.
 
--file("src\\server\\messages.gleam", 39).
+-file("src\\server\\messages.gleam", 43).
 -spec product_json(product_type()) -> gleam@json:json().
 product_json(Product) ->
     case Product of
@@ -68,7 +70,7 @@ product_json(Product) ->
             gleam@json:string(~"grain")
     end.
 
--file("src\\server\\messages.gleam", 43).
+-file("src\\server\\messages.gleam", 47).
 -spec product_from_string(binary()) -> {ok, product_type()} | {error, binary()}.
 product_from_string(Value) ->
     case Value of
@@ -91,7 +93,12 @@ product_from_string(Value) ->
             {error, ~"Unknown product"}
     end.
 
--file("src\\server\\messages.gleam", 75).
+-file("src\\server\\messages.gleam", 80).
+-spec room_summary_json(room_summary()) -> gleam@json:json().
+room_summary_json(Room) ->
+    gleam@json:object([{~"id", gleam@json:string(erlang:element(2, Room))}, {~"host", gleam@json:string(erlang:element(3, Room))}, {~"mode", gleam@json:string(erlang:element(4, Room))}, {~"players", gleam@json:array(erlang:element(5, Room), fun gleam@json:string/1)}, {~"max_players", gleam@json:int(erlang:element(6, Room))}, {~"started", gleam@json:bool(erlang:element(7, Room))}]).
+
+-file("src\\server\\messages.gleam", 91).
 -spec option_json_string(gleam@option:option(binary())) -> gleam@json:json().
 option_json_string(Value) ->
     case Value of
@@ -102,7 +109,7 @@ option_json_string(Value) ->
             gleam@json:string(Text)
     end.
 
--file("src\\server\\messages.gleam", 54).
+-file("src\\server\\messages.gleam", 58).
 -spec encode_server(server_message()) -> binary().
 encode_server(Message) ->
     case Message of
@@ -114,8 +121,8 @@ encode_server(Message) ->
             _pipe@1 = gleam@json:object([{~"type", gleam@json:string(~"pong")}]),
             gleam@json:to_string(_pipe@1);
 
-        {lobby_state, Room_id, Is_host, Started, Mode, Host_name, Players, Max_players} ->
-            _pipe@2 = gleam@json:object([{~"type", gleam@json:string(~"lobby_state")}, {~"room_id", option_json_string(Room_id)}, {~"is_host", gleam@json:bool(Is_host)}, {~"started", gleam@json:bool(Started)}, {~"mode", gleam@json:string(Mode)}, {~"host_name", gleam@json:string(Host_name)}, {~"players", gleam@json:array(Players, fun gleam@json:string/1)}, {~"max_players", gleam@json:int(Max_players)}]),
+        {lobby_state, Room_id, Is_host, Started, Mode, Host_name, Players, Max_players, Rooms} ->
+            _pipe@2 = gleam@json:object([{~"type", gleam@json:string(~"lobby_state")}, {~"room_id", option_json_string(Room_id)}, {~"is_host", gleam@json:bool(Is_host)}, {~"started", gleam@json:bool(Started)}, {~"mode", gleam@json:string(Mode)}, {~"host_name", gleam@json:string(Host_name)}, {~"players", gleam@json:array(Players, fun gleam@json:string/1)}, {~"max_players", gleam@json:int(Max_players)}, {~"rooms", gleam@json:array(Rooms, fun room_summary_json/1)}]),
             gleam@json:to_string(_pipe@2);
 
         {world_snapshot, Data} ->
@@ -130,7 +137,7 @@ encode_server(Message) ->
             gleam@json:to_string(_pipe@4)
     end.
 
--file("src\\server\\messages.gleam", 141).
+-file("src\\server\\messages.gleam", 157).
 -spec decode_product() -> gleam@dynamic@decode:decoder(product_type()).
 decode_product() ->
     gleam@dynamic@decode:then({decoder, fun gleam@dynamic@decode:decode_string/1}, fun(Text) ->
@@ -143,7 +150,7 @@ decode_product() ->
         end
     end).
 
--file("src\\server\\messages.gleam", 129).
+-file("src\\server\\messages.gleam", 145).
 -spec decode_building() -> gleam@dynamic@decode:decoder(building_type()).
 decode_building() ->
     gleam@dynamic@decode:then({decoder, fun gleam@dynamic@decode:decode_string/1}, fun(Text) ->
@@ -165,7 +172,7 @@ decode_building() ->
         end
     end).
 
--file("src\\server\\messages.gleam", 79).
+-file("src\\server\\messages.gleam", 95).
 -spec decode_client(binary()) -> {ok, client_message()} | {error, binary()}.
 decode_client(Text) ->
     Decoder = begin

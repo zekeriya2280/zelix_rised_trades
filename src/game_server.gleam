@@ -638,7 +638,10 @@ fn start_room(world: World, player_id: Int) -> #(World, Result(Nil, String)) {
         True -> #(world, Error("Another game room is already active on this server."))
         False -> case room.players == [] {
         True -> #(world, Error("Room is empty."))
-        False -> #(replace_room(world, Room(..room, started: True)), Ok(Nil))
+        False -> {
+          let prepared = reset_match_state(world, room.players)
+          #(replace_room(prepared, Room(..room, started: True)), Ok(Nil))
+        }
       }
     }
   }
@@ -655,15 +658,59 @@ fn leave_room(world: World, player_id: Int) -> #(World, Result(Nil, String)) {
     option.Some(room) -> {
       let players = list.filter(room.players, fn(id) { id != player_id })
       let world = case players {
-        [] -> remove_room(world, room.id)
+        [] -> reset_match_state(remove_room(world, room.id), room.players)
         _ -> {
+          let cleaned = case room.started {
+            True -> reset_player_match_state(world, player_id)
+            False -> world
+          }
           let new_host = case room.host_id == player_id { True -> hd(players) False -> room.host_id }
-          replace_room(world, Room(..room, host_id: new_host, players: players))
+          replace_room(cleaned, Room(..room, host_id: new_host, players: players))
         }
       }
       #(world, Ok(Nil))
     }
   }
+}
+
+fn reset_player_match_state(world: World, player_id: Int) -> World {
+  let players = list.map(world.players, fn(player) {
+    case player.id == player_id {
+      True -> Player(..player, money: starting_money, wood: 0, stone: 0, iron: 0, gold: 0, grain: 0)
+      False -> player
+    }
+  })
+  World(
+    ..world,
+    players: players,
+    banks: list.filter(world.banks, fn(item) { item.owner_id != player_id }),
+    factories: list.filter(world.factories, fn(item) { item.owner_id != player_id }),
+    warehouses: list.filter(world.warehouses, fn(item) { item.owner_id != player_id }),
+    gatherers: list.filter(world.gatherers, fn(item) { item.owner_id != player_id }),
+    farms: list.filter(world.farms, fn(item) { item.owner_id != player_id }),
+    vehicles: list.filter(world.vehicles, fn(item) { item.owner_id != player_id }),
+  )
+}
+
+fn reset_match_state(world: World, player_ids: List(Int)) -> World {
+  let players = list.map(world.players, fn(player) {
+    case list.any(player_ids, fn(id) { id == player.id }) {
+      True -> Player(..player, money: starting_money, wood: 0, stone: 0, iron: 0, gold: 0, grain: 0)
+      False -> player
+    }
+  })
+  World(
+    ..world,
+    tick: 0,
+    next_id: 1,
+    players: players,
+    banks: [],
+    factories: [],
+    warehouses: [],
+    gatherers: [],
+    farms: [],
+    vehicles: [],
+  )
 }
 
 fn hd(ids: List(Int)) -> Int { case ids { [first, ..] -> first [] -> 0 } }
@@ -699,25 +746,42 @@ fn safe_mode(mode: String) -> String {
 }
 
 fn lobby_json(world: World, player_id: Int) -> Result(String, String) {
-  case player_room(world, player_id) {
-    option.None -> Ok(json.object([
-      #("type", json.string("lobby_state")), #("room_id", json.null()), #("is_host", json.bool(False)),
-      #("started", json.bool(False)), #("mode", json.string("multiplayer")), #("host_name", json.string("")), #("players", json.array([], json.string)), #("max_players", json.int(room_max_players)),
-    ]) |> json.to_string)
-    option.Some(room) -> {
-      let names = list.map(room.players, fn(id) { player_name(world, id) })
-      Ok(json.object([
-        #("type", json.string("lobby_state")),
-        #("room_id", json.string(room.id)),
-        #("is_host", json.bool(room.host_id == player_id)),
-        #("started", json.bool(room.started)),
-        #("mode", json.string(room.mode)),
-        #("host_name", json.string(player_name(world, room.host_id))),
-        #("players", json.array(names, json.string)),
-        #("max_players", json.int(room_max_players)),
-      ]) |> json.to_string)
-    }
+  let current = player_room(world, player_id)
+  let room_payloads = world.rooms
+    |> list.filter(fn(room) { !room.started })
+    |> list.map(fn(room) {
+      messages.RoomSummary(
+        room.id,
+        player_name(world, room.host_id),
+        room.mode,
+        list.map(room.players, fn(id) { player_name(world, id) }),
+        room_max_players,
+        room.started,
+      )
+    })
+  let #(room_id, is_host, started, mode, host_name, players) = case current {
+    option.None -> #(option.None, False, False, "online", "", [])
+    option.Some(room) -> #(
+      option.Some(room.id),
+      room.host_id == player_id,
+      room.started,
+      room.mode,
+      player_name(world, room.host_id),
+      list.map(room.players, fn(id) { player_name(world, id) }),
+    )
   }
+  Ok(
+    messages.encode_server(messages.LobbyState(
+      room_id,
+      is_host,
+      started,
+      mode,
+      host_name,
+      players,
+      room_max_players,
+      room_payloads,
+    ))
+  )
 }
 
 fn player_name(world: World, player_id: Int) -> String {

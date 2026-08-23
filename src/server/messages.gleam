@@ -19,10 +19,14 @@ pub type ClientMessage {
   SetFactoryProduct(id: Int, product: ProductType)
 }
 
+pub type RoomSummary {
+  RoomSummary(id: String, host: String, mode: String, players: List(String), max_players: Int, started: Bool)
+}
+
 pub type ServerMessage {
   Welcome(player_id: Int)
   Pong
-  LobbyState(room_id: option.Option(String), is_host: Bool, started: Bool, mode: String, host_name: String, players: List(String), max_players: Int)
+  LobbyState(room_id: option.Option(String), is_host: Bool, started: Bool, mode: String, host_name: String, players: List(String), max_players: Int, rooms: List(RoomSummary))
   WorldSnapshot(data: String)
   ServerError(message: String)
   CommandRejected(message: String)
@@ -55,7 +59,7 @@ pub fn encode_server(message: ServerMessage) -> String {
   case message {
     Welcome(player_id:) -> json.object([#("type", json.string("welcome")), #("player_id", json.int(player_id))]) |> json.to_string
     Pong -> json.object([#("type", json.string("pong"))]) |> json.to_string
-    LobbyState(room_id:, is_host:, started:, mode:, host_name:, players:, max_players:) ->
+    LobbyState(room_id:, is_host:, started:, mode:, host_name:, players:, max_players:, rooms:) ->
       json.object([
         #("type", json.string("lobby_state")),
         #("room_id", option_json_string(room_id)),
@@ -65,11 +69,23 @@ pub fn encode_server(message: ServerMessage) -> String {
         #("host_name", json.string(host_name)),
         #("players", json.array(players, json.string)),
         #("max_players", json.int(max_players)),
+        #("rooms", json.array(rooms, room_summary_json)),
       ]) |> json.to_string
     WorldSnapshot(data:) -> data
     ServerError(message:) -> json.object([#("type", json.string("error")), #("message", json.string(message))]) |> json.to_string
     CommandRejected(message:) -> json.object([#("type", json.string("command_rejected")), #("message", json.string(message))]) |> json.to_string
   }
+}
+
+fn room_summary_json(room: RoomSummary) -> json.Json {
+  json.object([
+    #("id", json.string(room.id)),
+    #("host", json.string(room.host)),
+    #("mode", json.string(room.mode)),
+    #("players", json.array(room.players, json.string)),
+    #("max_players", json.int(room.max_players)),
+    #("started", json.bool(room.started)),
+  ])
 }
 
 fn option_json_string(value: option.Option(String)) -> json.Json {

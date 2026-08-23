@@ -19,5 +19,7 @@ pub fn ui_scaling_system(
         return;
     };
 
+    // A single resource keeps layout decisions deterministic across Android/Web/Desktop.
+    // Individual UI panels can consume this value without duplicating breakpoint logic.
     settings.scale = if window.width() < 900.0 { 1.25 } else { 1.0 };
 }

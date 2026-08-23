@@ -101,21 +101,34 @@ pub fn websocket_receive_system(
                 client.retry_in = 0.0;
                 authority.active = false;
             }
-            ServerMessage::LobbyState { room_id, is_host: _is_host, started, mode, host_name, players, max_players } => {
-                lobby.rooms.clear();
+            ServerMessage::LobbyState { room_id, is_host: _is_host, started, mode, host_name, players, max_players, rooms } => {
+                lobby.rooms = rooms.into_iter().map(|room| Room {
+                    id: room.id,
+                    host: room.host,
+                    mode: if room.mode.eq_ignore_ascii_case("online") { LobbyMode::Online } else { LobbyMode::Multiplayer },
+                    max_players: room.max_players as usize,
+                    players: room.players,
+                    started: room.started,
+                }).collect();
                 if let Some(id) = room_id.clone() {
                     let lobby_mode = if mode.eq_ignore_ascii_case("online") { LobbyMode::Online } else { LobbyMode::Multiplayer };
-                    let host = host_name;
-                    lobby.rooms.push(Room {
-                        id: id.clone(),
-                        host,
-                        mode: lobby_mode,
-                        max_players: max_players as usize,
-                        players: players.clone(),
-                        started,
-                    });
+                    if !lobby.rooms.iter().any(|room| room.id == id) {
+                        lobby.rooms.push(Room {
+                            id: id.clone(),
+                            host: host_name,
+                            mode: lobby_mode,
+                            max_players: max_players as usize,
+                            players: players.clone(),
+                            started,
+                        });
+                    }
                     frontend.current_room = Some(id.clone());
                     frontend.room_code = id;
+                    frontend.lobby_panel = if started {
+                        crate::frontend::LobbyPanel::Choice
+                    } else {
+                        crate::frontend::LobbyPanel::WaitingRoom
+                    };
                     if started {
                         frontend.screen = Screen::Game;
                         frontend.message = format!("Room started with {} players.", players.len());
@@ -128,7 +141,8 @@ pub fn websocket_receive_system(
                 } else {
                     frontend.current_room = None;
                     if frontend.screen == Screen::Game {
-                        frontend.screen = Screen::Intro;
+                        frontend.screen = Screen::Lobby;
+                        frontend.lobby_panel = crate::frontend::LobbyPanel::Choice;
                         game.paused = true;
                     }
                 }
@@ -139,7 +153,7 @@ pub fn websocket_receive_system(
                 client.retry_in = 0.0;
                 authority.active = data.in_game;
                 game.money = data.money;
-                game.world_time = data.tick as f64;
+                game.world_time = data.tick as f64 / 20.0;
                 game.server_tick = data.tick;
                 game.storage_used = data.storage_used;
                 game.storage_capacity = data.storage_capacity;
@@ -216,6 +230,19 @@ pub fn forward_build_events_system(
         if let Ok(factory) = factories.get(event.entity) {
             let _ = sender.send(ClientMessage::SetFactoryProduct { id: factory.id, product: event.product });
         }
+    }
+}
+
+pub fn cleanup_server_entities_system(
+    mut commands: Commands,
+    authority: Res<OnlineAuthority>,
+    entities: Query<Entity, With<ServerOwned>>,
+) {
+    if authority.active {
+        return;
+    }
+    for entity in &entities {
+        commands.entity(entity).despawn();
     }
 }
 

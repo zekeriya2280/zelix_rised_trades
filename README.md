@@ -10,7 +10,7 @@ The same authoritative game server and protocol are shared by Desktop, Android, 
 - Android: native HTTP + native WebSocket via Tokio; Bevy 0.19 `android-game-activity`.
 - Web: browser HTTP + browser WebSocket via `gloo-net` on WASM.
 
-The gameplay authority remains on the Gleam server. Clients send commands; the server validates and broadcasts authoritative state/snapshots.
+The gameplay authority remains on the Gleam server. Clients send commands; the server validates authoritative state and clients reconcile against 10 Hz authoritative snapshots.
 
 ## Firebase configuration
 
@@ -21,14 +21,14 @@ Firebase configuration is discovered automatically by the server. Put one of the
 
 Do not hard-code Firebase API keys into Rust/Gleam source. Firebase documents Android `google-services.json` and Web configuration objects as separate platform artifacts.
 
-### Firestore persistence
+### Firestore account metadata
 
 The server persists a small amount of state to Cloud Firestore through the REST API:
 
 - When a player registers, a document is written to the `players` collection keyed by the Firebase `localId` (fields: `uid`, `nickname`).
 - When the server creates a room, a document is written to the `rooms` collection keyed by the room code (fields: `code`, `host_id`, `mode`, `started`, `players`), and the host player is also written to the `players` collection keyed by `localId`. Writes are upserts, so re-logging-in or recreating is safe.
 
-Writes run on a background process so they never block the game loop. They are authorized with the logged-in user's Firebase ID token sent as a `Authorization: Bearer <id_token>` header to the Firestore REST endpoint `https://firestore.googleapis.com/v1` (Firestore writes cannot be done with an API key alone). Because writes are made as the end user, your Firestore **security rules must allow these writes** for authenticated users — at minimum `allow read, write: if request.auth != null;` (Firestore "test mode"). Rules that require specific users or deny unauthenticated writes will silently drop documents. citeturn855618search4turn855618search9
+Writes run on a background process so they never block the game loop. They are authorized with the logged-in user's Firebase ID token sent as a `Authorization: Bearer <id_token>` header to the Firestore REST endpoint `https://firestore.googleapis.com/v1` (Firestore writes cannot be done with an API key alone). Because writes are made as the end user, your Firestore **security rules must allow these writes** for authenticated users — at minimum `allow read, write: if request.auth != null;` (Firestore "test mode"). For production, use narrowly scoped Firestore Security Rules rather than blanket authenticated-user write access. Firebase documents that Firestore rules should be explicitly secured before deployment. citeturn795728search1turn795728search0
 
 ## Server
 

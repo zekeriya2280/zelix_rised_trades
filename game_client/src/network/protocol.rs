@@ -31,11 +31,23 @@ pub enum ServerMessage {
         host_name: String,
         players: Vec<String>,
         max_players: u32,
+        #[serde(default)]
+        rooms: Vec<RoomSummary>,
     },
     WorldSnapshot { data: WorldSnapshot },
     CommandRejected { message: String },
     Error { message: String },
     Disconnected { message: String },
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug, Default)]
+pub struct RoomSummary {
+    pub id: String,
+    pub host: String,
+    pub mode: String,
+    pub players: Vec<String>,
+    pub max_players: u32,
+    pub started: bool,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, Default)]
@@ -104,6 +116,7 @@ mod tests {
             host_name: "A".into(),
             players: vec!["A".into(), "B".into()],
             max_players: 5,
+            rooms: vec![],
         };
         let json = serde_json::to_string(&message).unwrap();
         let decoded: ServerMessage = serde_json::from_str(&json).unwrap();

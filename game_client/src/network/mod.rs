@@ -17,7 +17,8 @@ impl Plugin for NetworkPlugin {
             .init_resource::<websocket::PendingSnapshot>()
             .add_systems(Update, (
                 websocket_connect_system, websocket_receive_system, websocket_send_system,
-                forward_build_events_system, apply_snapshot_system, poll_auth_responses_system,
+                forward_build_events_system, apply_snapshot_system, cleanup_server_entities_system,
+                poll_auth_responses_system,
             ));
     }
 }
