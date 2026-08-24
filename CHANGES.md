@@ -1,5 +1,25 @@
 # Applied fixes
 
+## Packaging / hygiene pass
+
+- Removed leftover AI-authoring citation artifacts (`citeturn...`) from `README.md`.
+- Redacted the live Firebase Android API key that was committed in `google-services.json` (root and `android/app/`); both files now contain a placeholder and are excluded from version control going forward.
+- Added `google-services.example.json` as a template, matching the existing `firebase_config.example.json` / `game_config.example.json` pattern.
+- Added `google-services.json`, `android/app/google-services.json`, and `firebase_config.json` to `.gitignore`.
+- Added `LICENSE` (MIT) — confirm this is the license you actually want before publishing.
+- Added a GitHub Actions workflow (`.github/workflows/ci.yml`) running `gleam test` / `gleam check` for the server and `cargo fmt` / `clippy` / `check` for the client.
+
+Known remaining gap: unit test coverage on the Gleam server is still limited to a handful of pure/public functions (`initial_world`, Firebase decode helpers); most game-rule logic in `game_server.gleam` is private to the module and would need either exposed test seams or in-module tests to cover directly.
+
+## Rust client compile errors fixed
+
+`cargo run` in `game_client` failed with 4 errors:
+
+- `use of undeclared type LobbyPanel` (×3 in `src/network/websocket.rs`) — `LobbyPanel` is defined in `frontend.rs` but wasn't in that file's `use crate::frontend::{...}` import list. Added it.
+- `cannot find value cleanup_server_entities_system` (`src/network/mod.rs`) — this system was registered in the `NetworkPlugin` system schedule but was never defined anywhere in the crate. Its job (despawning stale server-owned entities not present in the latest snapshot) is already performed inline at the end of `apply_snapshot_system` in `websocket.rs`, so the dangling reference was a leftover from an earlier refactor. Removed it from the schedule; no behavior was lost.
+
+Also scanned the whole `game_client` crate for any other dangling `add_systems` references or unimported public types from `frontend.rs` — none found.
+
 - Removed local client-side room creation/join/start/leave authority.
 - Added server-authoritative room manager with five-player capacity and host-only start.
 - Added room-state synchronization to clients.

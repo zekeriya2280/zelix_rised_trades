@@ -21,6 +21,8 @@ Firebase configuration is discovered automatically by the server. Put one of the
 
 Do not hard-code Firebase API keys into Rust/Gleam source. Firebase documents Android `google-services.json` and Web configuration objects as separate platform artifacts.
 
+Neither `google-services.json` nor `firebase_config.json` is committed to this repository (see `.gitignore`). Copy `google-services.example.json` to `google-services.json` (and to `android/app/google-services.json`) and fill in your own Firebase project's values, or copy `firebase_config.example.json` to `firebase_config.json`. Rotate any key that was ever committed to a public repository.
+
 ### Firestore account metadata
 
 The server persists a small amount of state to Cloud Firestore through the REST API:
@@ -28,7 +30,7 @@ The server persists a small amount of state to Cloud Firestore through the REST 
 - When a player registers, a document is written to the `players` collection keyed by the Firebase `localId` (fields: `uid`, `nickname`).
 - When the server creates a room, a document is written to the `rooms` collection keyed by the room code (fields: `code`, `host_id`, `mode`, `started`, `players`), and the host player is also written to the `players` collection keyed by `localId`. Writes are upserts, so re-logging-in or recreating is safe.
 
-Writes run on a background process so they never block the game loop. They are authorized with the logged-in user's Firebase ID token sent as a `Authorization: Bearer <id_token>` header to the Firestore REST endpoint `https://firestore.googleapis.com/v1` (Firestore writes cannot be done with an API key alone). Because writes are made as the end user, your Firestore **security rules must allow these writes** for authenticated users — at minimum `allow read, write: if request.auth != null;` (Firestore "test mode"). For production, use narrowly scoped Firestore Security Rules rather than blanket authenticated-user write access. Firebase documents that Firestore rules should be explicitly secured before deployment. citeturn795728search1turn795728search0
+Writes run on a background process so they never block the game loop. They are authorized with the logged-in user's Firebase ID token sent as a `Authorization: Bearer <id_token>` header to the Firestore REST endpoint `https://firestore.googleapis.com/v1` (Firestore writes cannot be done with an API key alone). Because writes are made as the end user, your Firestore **security rules must allow these writes** for authenticated users — at minimum `allow read, write: if request.auth != null;` (Firestore "test mode"). For production, use narrowly scoped Firestore Security Rules rather than blanket authenticated-user write access. Firebase documents that Firestore rules should be explicitly secured before deployment.
 
 ## Server
 
@@ -51,7 +53,7 @@ For production HTTPS hosting, set `GAME_SERVER_URL` at build time or reverse-pro
 
 ## Android development
 
-Bevy 0.19 requires the Android GameActivity feature explicitly. The project enables it and builds a `cdylib` for Android. Use `cargo ndk` to create the native library, then package it in an Android/Gradle GameActivity host. Bevy's current Android guidance uses `android-game-activity` and `cargo-ndk`. citeturn855618search0turn930284search2turn930284search10
+Bevy 0.19 requires the Android GameActivity feature explicitly. The project enables it and builds a `cdylib` for Android. Use `cargo ndk` to create the native library, then package it in an Android/Gradle GameActivity host. Bevy's current Android guidance uses `android-game-activity` and `cargo-ndk`.
 
 Example:
 

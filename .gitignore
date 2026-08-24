@@ -13,3 +13,10 @@ build/
 game_client/target/
 android/app/build/
 android/app/src/main/jniLibs/
+
+# Firebase secrets — never commit real project credentials.
+# Copy google-services.example.json to google-services.json (and
+# android/app/google-services.json) and fill in your own project's values.
+google-services.json
+android/app/google-services.json
+firebase_config.json

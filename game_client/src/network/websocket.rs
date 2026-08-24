@@ -5,7 +5,7 @@ use serde_json;
 
 use super::auth::server_base;
 use super::protocol::{ClientMessage, ServerMessage, WorldSnapshot};
-use crate::frontend::{AuthStore, LobbyMode, LobbyStore, Room, FrontendState, Screen};
+use crate::frontend::{AuthStore, LobbyMode, LobbyPanel, LobbyStore, Room, FrontendState, Screen};
 use crate::core::events::{BuildBankEvent, BuildStructureEvent, SetFactoryProductEvent};
 use crate::core::{Bank, CityRadius, Factory, Farm, Gatherer, OwnerId, PathFollower, ServerId, Vehicle, Warehouse};
 
