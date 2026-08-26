@@ -1,7 +1,7 @@
 use bevy::prelude::*;
 
-use crate::core::components::{Bank, Factory, Farm, Gatherer, PathFollower, Warehouse};
 use crate::core::{GameState, MaterialInventory, ProductType};
+
 
 #[derive(Component)]
 pub struct MoneyText;

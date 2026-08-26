@@ -1,6 +1,6 @@
 use bevy::prelude::*;
 
-use crate::core::components::{Factory, OwnerId};
+use crate::core::components::Factory;
 use crate::network::OnlineAuthority;
 use crate::core::events::{
     CloseBuildMenuEvent, CloseFactoryMenuEvent, OpenFactoryMenuEvent, ProductType,

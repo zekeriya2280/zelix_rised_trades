@@ -9,11 +9,11 @@
 - Web Trunk entry point included.
 - Generated `build/`, `game_client/target/`, Android native libraries, and APK outputs are intentionally omitted from the ZIP.
 
-Live compiler/test execution was not available in the assembly environment because Rust/Cargo and Gleam/Erlang executables are not installed.
+Live compiler/test execution was not available in the assembly environment because Rust/Cargo and Gleam/Erlang executables are not installed. The ZIP includes `scripts/verify.ps1` to run the complete verification set on a machine with the required toolchains.
 
 - Online lobby now uses one visibility authority: Online -> Create Room / Enter Room / Settings / Main Menu, with Create and Enter panels mutually exclusive.
 - Enter Room receives a server-generated list of all joinable rooms.
-- Authoritative lobby/world snapshots are requested at 10 Hz instead of every 2 seconds.
+- Authoritative world snapshots are requested at 10 Hz (100 ms). Lobby state is updated on connection, lobby commands, and a 15-second keep-alive.
 - Match world/economy is reset when a room starts; final room departure clears the match state.
 - Server-owned client entities are despawned when leaving online gameplay.
 - Added Android GameActivity Gradle host project and asset packaging.

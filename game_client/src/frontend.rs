@@ -29,6 +29,7 @@ pub enum AuthField {
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum LobbyMode {
+    #[allow(dead_code)]
     SinglePlayer,
     Multiplayer,
     Online,
@@ -58,6 +59,7 @@ pub enum LobbyPanel {
 
 #[derive(Clone, Debug)]
 pub struct UserAccount {
+    #[allow(dead_code)]
     pub email: String,
     pub nickname: String,
     pub token: String,
@@ -130,6 +132,7 @@ struct FrontendRoot {
 }
 
 #[derive(Component)]
+#[allow(dead_code)]
 struct ScreenLabel;
 
 #[derive(Component)]
@@ -203,6 +206,7 @@ enum Action {
     LobbyStart,
     LobbyLeave,
     SettingsBack,
+    #[allow(dead_code)]
     GameBack,
 }
 
@@ -428,6 +432,7 @@ where
 }
 
 /// A selectable game-mode row on the Create Room panel.
+#[allow(dead_code)]
 fn spawn_mode_option(parent: &mut ChildSpawnerCommands, label: &str, mode: LobbyMode) {
     parent
         .spawn((
@@ -782,7 +787,7 @@ fn refresh_status_texts_system(
         ),
     >,
 ) {
-    if let Ok(mut text) = message.single_mut() {
+    for mut text in &mut message {
         let mut body = state.message.clone();
         if let Some(user) = &auth.current_user {
             body.push_str(&format!("\nSigned in as {}", user.nickname));
@@ -790,42 +795,44 @@ fn refresh_status_texts_system(
         if let Some(room) = state.current_room.as_ref() {
             body.push_str(&format!("\nRoom: {}", room));
         }
-        *text = Text::new(body);
+        *text = Text::new(body.clone());
     }
 
-    if let Ok(mut text) = lobby_message.single_mut() {
-        let mut body = if lobby.rooms.is_empty() {
-            String::from("No rooms yet. Create one to start.")
-        } else {
-            let mut rows = Vec::new();
-            for room in &lobby.rooms {
-                rows.push(format!(
-                    "{} | {} | {}/{} | host: {}{}",
-                    room.id,
-                    room.mode.label(),
-                    room.players.len(),
-                    room.max_players,
-                    room.host,
-                    if room.started { " | started" } else { "" },
-                ));
-            }
-            rows.join("\n")
-        };
-        if !state.lobby_message.is_empty() {
-            if !body.is_empty() {
-                body.push_str("\n\n");
-            }
-            body.push_str(&state.lobby_message);
+    let lobby_body = if lobby.rooms.is_empty() {
+        String::from("No rooms yet. Create one to start.")
+    } else {
+        let mut rows = Vec::new();
+        for room in &lobby.rooms {
+            rows.push(format!(
+                "{} | {} | {}/{} | host: {}{}",
+                room.id,
+                room.mode.label(),
+                room.players.len(),
+                room.max_players,
+                room.host,
+                if room.started { " | started" } else { "" },
+            ));
         }
-        *text = Text::new(body);
+        rows.join("\n")
+    };
+    let mut lobby_full = lobby_body;
+    if !state.lobby_message.is_empty() {
+        if !lobby_full.is_empty() {
+            lobby_full.push_str("\n\n");
+        }
+        lobby_full.push_str(&state.lobby_message);
+    }
+    for mut text in &mut lobby_message {
+        *text = Text::new(lobby_full.clone());
     }
 
-    if let Ok(mut text) = settings_message.single_mut() {
-        *text = Text::new(if state.settings_message.is_empty() {
-            "VSync: on | UI scale: adaptive | Sound: placeholder".to_string()
-        } else {
-            state.settings_message.clone()
-        });
+    let settings_body = if state.settings_message.is_empty() {
+        "VSync: on | UI scale: adaptive | Sound: placeholder".to_string()
+    } else {
+        state.settings_message.clone()
+    };
+    for mut text in &mut settings_message {
+        *text = Text::new(settings_body.clone());
     }
 }
 
@@ -945,10 +952,11 @@ fn cycle_field(current: AuthField, order: &[AuthField], reverse: bool) -> AuthFi
 
 fn screen_button_system(
     mut state: ResMut<FrontendState>,
-    mut auth: ResMut<AuthStore>,
+    auth: ResMut<AuthStore>,
     mut game: ResMut<GameState>,
     client: Res<AuthClient>,
     network: Res<NetworkClient>,
+    lobby: Res<LobbyStore>,
     buttons: Query<(&Interaction, &ActionButton), (Changed<Interaction>, With<Button>)>,
 ) {
     for (interaction, button) in &buttons {
@@ -1078,7 +1086,21 @@ fn screen_button_system(
                 game.paused = true;
             }
             Action::LobbyStart => {
-                send_lobby_command(&mut state, &auth, &network, crate::network::protocol::ClientMessage::LobbyStart);
+                // A room cannot start with the host alone: require at least one
+                // other player (2..=5 total). The server enforces this too.
+                let player_count = state
+                    .current_room
+                    .as_ref()
+                    .and_then(|code| lobby.rooms.iter().find(|room| &room.id == code))
+                    .map(|room| room.players.len())
+                    .unwrap_or(0);
+                if player_count < 2 {
+                    state.lobby_message = String::from(
+                        "At least 2 players are required to start (you + 1 more, max 5).",
+                    );
+                } else {
+                    send_lobby_command(&mut state, &auth, &network, crate::network::protocol::ClientMessage::LobbyStart);
+                }
             }
             Action::LobbyLeave => {
                 send_lobby_command(&mut state, &auth, &network, crate::network::protocol::ClientMessage::LobbyLeave);

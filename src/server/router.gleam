@@ -10,6 +10,21 @@ import game_server
 import server/auth
 import server/messages
 
+@external(erlang, "game_server_os_ffi", "get_env")
+fn get_env(name: String) -> Result(String, Nil)
+
+/// CORS origin for the auth endpoints. Defaults to "*" for local/dev use
+/// (matching the project's previous behavior), but production deployments
+/// should set the ALLOWED_ORIGIN environment variable to their real Web
+/// origin (e.g. "https://play.example.com") to avoid allowing arbitrary
+/// third-party sites to call the authenticated endpoints from a browser.
+fn allowed_origin() -> String {
+  case get_env("ALLOWED_ORIGIN") {
+    Ok(value) -> value
+    Error(_) -> "*"
+  }
+}
+
 type WsState {
   WsState(world: process.Subject(game_server.Message), player_id: option.Option(Int))
 }
@@ -754,7 +769,7 @@ fn cors(
   resp
   |> response.set_header(
     "access-control-allow-origin",
-    "*",
+    allowed_origin(),
   )
   |> response.set_header(
     "access-control-allow-methods",

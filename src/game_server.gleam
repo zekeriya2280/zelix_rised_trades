@@ -414,7 +414,8 @@ fn snap_position(x: Float, y: Float) -> Position {
 }
 
 fn validate_coordinate(value: Float) -> Bool {
-  value >=. 0.0 -. world_limit && value <=. world_limit
+  value >. 0.0 -. world_limit
+    && value <=. world_limit
 }
 
 fn too_close(world: World, x: Float, y: Float) -> Bool {
@@ -471,7 +472,9 @@ fn remove_online(ids: List(Int), player_id: Int) -> List(Int) {
 
 fn nickname_taken(world: World, nickname: String, except_player_id: Int) -> Bool {
   list.any(world.players, fn(player) {
-    player.id != except_player_id && string.lowercase(player.name) == string.lowercase(nickname)
+    player.id != except_player_id
+      && is_online(world, player.id)
+      && string.lowercase(player.name) == string.lowercase(nickname)
   })
 }
 
@@ -634,22 +637,22 @@ fn start_room(world: World, player_id: Int) -> #(World, Result(Nil, String)) {
     option.None -> #(world, Error("You are not in a room."))
     option.Some(room) -> case room.host_id == player_id {
       False -> #(world, Error("Only the host can start the room."))
-      True -> case any_started_room_other_than(world, room.id) {
-        True -> #(world, Error("Another game room is already active on this server."))
-        False -> case room.players == [] {
-        True -> #(world, Error("Room is empty."))
-        False -> {
-          let prepared = reset_match_state(world, room.players)
-          #(replace_room(prepared, Room(..room, started: True)), Ok(Nil))
+      True -> case any_started_room(world) {
+        True -> #(world, Error("A match is already running on this server. Please wait for it to finish."))
+        False -> case list.length(room.players) < 2 {
+          True -> #(world, Error("At least 2 players are required to start the room."))
+          False -> {
+            let prepared = reset_match_state(world, room.players)
+            #(replace_room(prepared, Room(..room, started: True)), Ok(Nil))
+          }
         }
       }
     }
   }
-  }
 }
 
-fn any_started_room_other_than(world: World, room_id: String) -> Bool {
-  list.any(world.rooms, fn(room) { room.id != room_id && room.started })
+fn any_started_room(world: World) -> Bool {
+  list.any(world.rooms, fn(room) { room.started })
 }
 
 fn leave_room(world: World, player_id: Int) -> #(World, Result(Nil, String)) {

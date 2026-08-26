@@ -1,13 +1,18 @@
 # Applied fixes
 
+## Security review pass (this revision)
+
+- **Actually redacted** the live Firebase Android API key that was still present verbatim in `android/app/google-services.json` (a previous packaging pass claimed this was done, but the real key was still committed). The file now matches `google-services.example.json` with placeholder values. **If this key was ever pushed to a public repository or shared, rotate it in the Firebase console — replacing the file alone does not invalidate an already-leaked key.**
+- Made the auth endpoints' CORS policy configurable: `/auth/login` and `/auth/register` previously always sent `Access-Control-Allow-Origin: *`. They now read an `ALLOWED_ORIGIN` environment variable (falling back to `*` for local dev) via a new `server/router.allowed_origin/0` helper backed by the existing `game_server_os_ffi:get_env/1` FFI. Set `ALLOWED_ORIGIN` in production to your real Web origin.
+
 ## Packaging / hygiene pass
 
 - Removed leftover AI-authoring citation artifacts (`citeturn...`) from `README.md`.
-- Redacted the live Firebase Android API key that was committed in `google-services.json` (root and `android/app/`); both files now contain a placeholder and are excluded from version control going forward.
 - Added `google-services.example.json` as a template, matching the existing `firebase_config.example.json` / `game_config.example.json` pattern.
 - Added `google-services.json`, `android/app/google-services.json`, and `firebase_config.json` to `.gitignore`.
 - Added `LICENSE` (MIT) — confirm this is the license you actually want before publishing.
 - Added a GitHub Actions workflow (`.github/workflows/ci.yml`) running `gleam test` / `gleam check` for the server and `cargo fmt` / `clippy` / `check` for the client.
+- This distributable ZIP excludes the generated `build/` and `game_client/target/` directories (per `.gitignore`); they are recreated automatically by `gleam build` / `cargo build`.
 
 Known remaining gap: unit test coverage on the Gleam server is still limited to a handful of pure/public functions (`initial_world`, Firebase decode helpers); most game-rule logic in `game_server.gleam` is private to the module and would need either exposed test seams or in-module tests to cover directly.
 

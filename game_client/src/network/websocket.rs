@@ -8,6 +8,10 @@ use super::protocol::{ClientMessage, ServerMessage, WorldSnapshot};
 use crate::frontend::{AuthStore, LobbyMode, LobbyPanel, LobbyStore, Room, FrontendState, Screen};
 use crate::core::events::{BuildBankEvent, BuildStructureEvent, SetFactoryProductEvent};
 use crate::core::{Bank, CityRadius, Factory, Farm, Gatherer, OwnerId, PathFollower, ServerId, Vehicle, Warehouse};
+use crate::render::map::TerrainGrid;
+use crate::render::path::route_between;
+use crate::render::logistics::{collect_cells, spawn_segment};
+use crate::render::vehicle_render::VehicleSprite;
 
 #[derive(Resource, Default)]
 pub struct NetworkClient {
@@ -171,7 +175,16 @@ pub fn websocket_receive_system(
                 client.connected = false;
                 client.connecting = false;
                 client.retry_in = 2.0;
+                client.player_id = None;
                 authority.active = false;
+                pending.0 = None;
+                frontend.current_room = None;
+                frontend.current_room_is_host = false;
+                frontend.room_code.clear();
+                if frontend.screen == Screen::Game {
+                    frontend.screen = Screen::Intro;
+                    game.paused = true;
+                }
                 client.last_error = Some(message);
             }
         }
@@ -179,18 +192,54 @@ pub fn websocket_receive_system(
     client.receiver = Some(receiver);
 }
 
+const SNAPSHOT_INTERVAL_SECONDS: f32 = 0.1;
+const KEEPALIVE_INTERVAL_SECONDS: f32 = 15.0;
+/// While waiting in a room lobby the client polls for LobbyState every second,
+/// so when the host starts the match every member's panel drops and everyone
+/// enters the game at (nearly) the same moment instead of up to one keep-alive
+/// interval later.
+const LOBBY_POLL_INTERVAL_SECONDS: f32 = 1.0;
+
 pub fn websocket_send_system(
     time: Res<Time>,
     client: Res<NetworkClient>,
-    mut elapsed: Local<f32>,
+    frontend: Res<FrontendState>,
+    mut snapshot_elapsed: Local<f32>,
+    mut keepalive_elapsed: Local<f32>,
+    mut lobby_elapsed: Local<f32>,
 ) {
-    if !client.connected { return; }
-    *elapsed += time.delta_secs();
-    if *elapsed < 1.0 { return; }
-    *elapsed = 0.0;
-    if let Some(sender) = &client.sender {
-        let _ = sender.send(ClientMessage::Ping);
+    if !client.connected {
+        *snapshot_elapsed = 0.0;
+        *keepalive_elapsed = 0.0;
+        *lobby_elapsed = 0.0;
+        return;
+    }
+
+    *snapshot_elapsed += time.delta_secs();
+    *keepalive_elapsed += time.delta_secs();
+    *lobby_elapsed += time.delta_secs();
+
+    let Some(sender) = &client.sender else { return; };
+
+    if *snapshot_elapsed >= SNAPSHOT_INTERVAL_SECONDS {
+        *snapshot_elapsed %= SNAPSHOT_INTERVAL_SECONDS;
         let _ = sender.send(ClientMessage::RequestSnapshot);
+    }
+
+    if *keepalive_elapsed >= KEEPALIVE_INTERVAL_SECONDS {
+        *keepalive_elapsed %= KEEPALIVE_INTERVAL_SECONDS;
+        let _ = sender.send(ClientMessage::Ping);
+    }
+
+    // A Ping also answers with a fresh LobbyState on the server, so polling it
+    // here keeps waiting-room members in sync with the host's Start Game.
+    if frontend.screen == Screen::Lobby && frontend.current_room.is_some()
+        && *lobby_elapsed >= LOBBY_POLL_INTERVAL_SECONDS
+    {
+        *lobby_elapsed %= LOBBY_POLL_INTERVAL_SECONDS;
+        let _ = sender.send(ClientMessage::Ping);
+    } else if !(frontend.screen == Screen::Lobby && frontend.current_room.is_some()) {
+        *lobby_elapsed = 0.0;
     }
 }
 
@@ -225,9 +274,25 @@ pub fn apply_snapshot_system(
     mut commands: Commands,
     mut pending: ResMut<PendingSnapshot>,
     asset_server: Res<AssetServer>,
-    server_entities: Query<(Entity, &ServerId), With<ServerOwned>>,
+    network: Res<NetworkClient>,
+    server_entities: Query<(Entity, &ServerId, &OwnerId), With<ServerOwned>>,
+    terrain: Res<TerrainGrid>,
+    server_buildings: Query<
+        &GlobalTransform,
+        (
+            With<ServerOwned>,
+            Or<(With<Bank>, With<Factory>, With<Warehouse>, With<Gatherer>, With<Farm>)>,
+        ),
+    >,
 ) {
     let Some(snapshot) = pending.0.take() else { return; };
+
+    // Only replicate this client's OWN entities. Other players' buildings,
+    // vehicles and their delivery roads must never appear on screen — they
+    // were showing up as unwanted objects/movements besides the player's own
+    // truck during factory/warehouse/transportation gameplay.
+    let my_id = network.player_id;
+    let is_mine = |owner_id: u64| my_id == Some(owner_id);
 
     // Reconcile by authoritative server id instead of destroying/recreating the
     // whole world every snapshot. This removes a large amount of Bevy ECS and
@@ -235,12 +300,13 @@ pub fn apply_snapshot_system(
     use std::collections::{HashMap, HashSet};
     let existing: HashMap<u64, Entity> = server_entities
         .iter()
-        .map(|(entity, id)| (id.0, entity))
+        .map(|(entity, id, _owner)| (id.0, entity))
         .collect();
 
     let mut seen = HashSet::new();
 
     for bank in snapshot.banks {
+        if !is_mine(bank.owner_id) { continue; }
         seen.insert(bank.id);
         let entity = existing.get(&bank.id).copied().unwrap_or_else(|| {
             commands.spawn((
@@ -262,6 +328,7 @@ pub fn apply_snapshot_system(
     }
 
     for factory in snapshot.factories {
+        if !is_mine(factory.owner_id) { continue; }
         seen.insert(factory.id);
         let entity = existing.get(&factory.id).copied().unwrap_or_else(|| {
             commands.spawn((
@@ -283,6 +350,7 @@ pub fn apply_snapshot_system(
     }
 
     for warehouse in snapshot.warehouses {
+        if !is_mine(warehouse.owner_id) { continue; }
         seen.insert(warehouse.id);
         let entity = existing.get(&warehouse.id).copied().unwrap_or_else(|| {
             commands.spawn((
@@ -303,6 +371,7 @@ pub fn apply_snapshot_system(
     }
 
     for building in snapshot.gatherers {
+        if !is_mine(building.owner_id) { continue; }
         seen.insert(building.id);
         let entity = existing.get(&building.id).copied().unwrap_or_else(|| {
             commands.spawn((
@@ -323,6 +392,7 @@ pub fn apply_snapshot_system(
     }
 
     for building in snapshot.farms {
+        if !is_mine(building.owner_id) { continue; }
         seen.insert(building.id);
         let entity = existing.get(&building.id).copied().unwrap_or_else(|| {
             commands.spawn((
@@ -343,13 +413,20 @@ pub fn apply_snapshot_system(
     }
 
     for vehicle in snapshot.vehicles {
+        // Skip other players' vehicles entirely: spawning them also draws
+        // their delivery roads, which appeared as unwanted movement.
+        if !is_mine(vehicle.owner_id) { continue; }
         seen.insert(vehicle.id);
+        let is_new = !existing.contains_key(&vehicle.id);
         let entity = existing.get(&vehicle.id).copied().unwrap_or_else(|| {
             commands.spawn((
                 ServerOwned,
                 ServerId(vehicle.id),
                 OwnerId(vehicle.owner_id),
                 Vehicle { speed: vehicle.speed },
+                // Marker so update_vehicle_visuals_system rotates the sprite
+                // along the travel direction (otherwise it always faces up).
+                VehicleSprite,
                 Sprite { image: asset_server.load("vehicle.png"), custom_size: Some(Vec2::splat(24.0)), ..default() },
                 Transform::from_xyz(vehicle.x, vehicle.y, 20.0),
                 PathFollower { waypoints: vec![Vec2::new(vehicle.target_x, vehicle.target_y)], index: 0 },
@@ -359,14 +436,40 @@ pub fn apply_snapshot_system(
             commands.entity(entity).insert((
                 OwnerId(vehicle.owner_id),
                 Vehicle { speed: vehicle.speed },
+                VehicleSprite,
                 Transform::from_xyz(vehicle.x, vehicle.y, 20.0),
                 PathFollower { waypoints: vec![Vec2::new(vehicle.target_x, vehicle.target_y)], index: 0 },
             ));
         }
+
+        // Draw the factory -> warehouse delivery road for newly replicated
+        // vehicles so online players see the route just like in single-player.
+        // The segments become children of the vehicle and despawn with it.
+        if is_new {
+            let mut blocked = std::collections::HashSet::new();
+            for transform in &server_buildings {
+                collect_cells(&terrain, transform.translation().truncate(), &mut blocked);
+            }
+            let is_blocked = |x: usize, y: usize| blocked.contains(&(x, y));
+            if let Some(waypoints) = route_between(
+                &terrain,
+                &is_blocked,
+                Vec2::new(vehicle.x, vehicle.y),
+                Vec2::new(vehicle.target_x, vehicle.target_y),
+            ) {
+                let segments: Vec<Entity> = waypoints
+                    .windows(2)
+                    .map(|pair| spawn_segment(&mut commands, pair[0], pair[1]))
+                    .collect();
+                if !segments.is_empty() {
+                    commands.entity(entity).add_children(&segments);
+                }
+            }
+        }
     }
 
-    for (entity, id) in server_entities.iter() {
-        if !seen.contains(&id.0) {
+    for (entity, id, owner) in server_entities.iter() {
+        if !seen.contains(&id.0) || !is_mine(owner.0) {
             commands.entity(entity).despawn();
         }
     }

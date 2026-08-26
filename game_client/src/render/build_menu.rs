@@ -251,7 +251,7 @@ pub fn build_menu_button_system(
 
 pub fn bank_button_system(
     menu_state: Res<BuildMenuState>,
-    mut query: Query<&Interaction, (With<BankMenuButton>, Changed<Interaction>)>,
+    query: Query<&Interaction, (With<BankMenuButton>, Changed<Interaction>)>,
     mut build_bank_events: MessageWriter<BuildBankEvent>,
     mut close_menu_events: MessageWriter<CloseBuildMenuEvent>,
 ) {

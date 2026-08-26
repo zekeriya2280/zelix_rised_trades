@@ -94,6 +94,17 @@ pub struct VehicleState {
     pub speed: f32,
 }
 
+impl VehicleState {
+    #[allow(dead_code)]
+    pub fn is_finite(&self) -> bool {
+        self.x.is_finite()
+            && self.y.is_finite()
+            && self.target_x.is_finite()
+            && self.target_y.is_finite()
+            && self.speed.is_finite()
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -133,5 +144,27 @@ mod tests {
         let json = serde_json::to_string(&message).unwrap();
         let decoded: ServerMessage = serde_json::from_str(&json).unwrap();
         assert!(matches!(decoded, ServerMessage::WorldSnapshot { data } if data.money == 42 && data.inventory.gold == 12));
+    }
+
+    #[test]
+    fn vehicle_state_rejects_non_finite_values() {
+        let state = VehicleState {
+            id: 1,
+            owner_id: 2,
+            x: f32::NAN,
+            y: 0.0,
+            target_x: 1.0,
+            target_y: 1.0,
+            speed: 2.0,
+        };
+        assert!(!state.is_finite());
+    }
+
+    #[test]
+    fn room_summary_defaults_are_safe() {
+        let room = RoomSummary::default();
+        assert!(room.id.is_empty());
+        assert_eq!(room.max_players, 0);
+        assert!(!room.started);
     }
 }

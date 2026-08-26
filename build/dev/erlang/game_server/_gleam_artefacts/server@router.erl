@@ -5,22 +5,38 @@
 
 -type ws_state() :: {ws_state, gleam@erlang@process:subject(game_server:message()), gleam@option:option(integer())}.
 
--file("src\\server\\router.gleam", 735).
+-file("src\\server\\router.gleam", 21).
+-spec allowed_origin() -> binary().
+-doc(~" CORS origin for the auth endpoints. Defaults to \"*\" for local/dev use
+ (matching the project's previous behavior), but production deployments
+ should set the ALLOWED_ORIGIN environment variable to their real Web
+ origin (e.g. \"https://play.example.com\") to avoid allowing arbitrary
+ third-party sites to call the authenticated endpoints from a browser.").
+allowed_origin() ->
+    case game_server_os_ffi:get_env(~"ALLOWED_ORIGIN") of
+        {ok, Value} ->
+            Value;
+
+        {error, _} ->
+            ~"*"
+    end.
+
+-file("src\\server\\router.gleam", 750).
 -spec text(integer(), binary()) -> gleam@http@response:response(mist:response_data()).
 text(Status, Body) ->
     _pipe = gleam@http@response:new(Status),
     _pipe@1 = gleam@http@response:set_header(_pipe, ~"content-type", ~"text/plain; charset=utf-8"),
     gleam@http@response:set_body(_pipe@1, {bytes, gleam_stdlib:wrap_list(Body)}).
 
--file("src\\server\\router.gleam", 751).
+-file("src\\server\\router.gleam", 766).
 -spec cors(gleam@http@response:response(mist:response_data())) -> gleam@http@response:response(mist:response_data()).
 cors(Resp) ->
     _pipe = Resp,
-    _pipe@1 = gleam@http@response:set_header(_pipe, ~"access-control-allow-origin", ~"*"),
+    _pipe@1 = gleam@http@response:set_header(_pipe, ~"access-control-allow-origin", allowed_origin()),
     _pipe@2 = gleam@http@response:set_header(_pipe@1, ~"access-control-allow-methods", ~"POST, OPTIONS"),
     gleam@http@response:set_header(_pipe@2, ~"access-control-allow-headers", ~"content-type, authorization").
 
--file("src\\server\\router.gleam", 769).
+-file("src\\server\\router.gleam", 784).
 -spec auth_response(gleam@http@request:request(mist@internal@http:connection()), binary()) -> gleam@http@response:response(mist:response_data()).
 auth_response(Request, Action) ->
     case erlang:element(2, Request) of
@@ -55,7 +71,7 @@ auth_response(Request, Action) ->
             cors(text(405, ~"method not allowed"))
     end.
 
--file("src\\server\\router.gleam", 722).
+-file("src\\server\\router.gleam", 737).
 -spec disconnect_player(ws_state()) -> nil.
 disconnect_player(State) ->
     case erlang:element(3, State) of
@@ -66,18 +82,18 @@ disconnect_player(State) ->
             nil
     end.
 
--file("src\\server\\router.gleam", 711).
+-file("src\\server\\router.gleam", 726).
 -spec ignore_send(mist@internal@websocket:websocket_connection(), server@messages:server_message()) -> {ok, nil} | {error, glisten@socket:socket_reason()}.
 ignore_send(Connection, Message) ->
     _ = mist:send_text_frame(Connection, server@messages:encode_server(Message)).
 
--file("src\\server\\router.gleam", 697).
+-file("src\\server\\router.gleam", 712).
 -spec send_and_continue(ws_state(), mist@internal@websocket:websocket_connection(), server@messages:server_message()) -> mist:next(ws_state(), nil).
 send_and_continue(State, Connection, Message) ->
     _ = ignore_send(Connection, Message),
     mist:continue(State).
 
--file("src\\server\\router.gleam", 660).
+-file("src\\server\\router.gleam", 675).
 -spec send_snapshot_for(ws_state(), mist@internal@websocket:websocket_connection()) -> {ok, nil} | {error, binary()}.
 send_snapshot_for(State, Connection) ->
     case erlang:element(3, State) of
@@ -105,7 +121,7 @@ send_snapshot_for(State, Connection) ->
             end
     end.
 
--file("src\\server\\router.gleam", 422).
+-file("src\\server\\router.gleam", 437).
 -spec handle_snapshot(ws_state(), mist@internal@websocket:websocket_connection()) -> mist:next(ws_state(), nil).
 handle_snapshot(State, Connection) ->
     case erlang:element(3, State) of
@@ -122,7 +138,7 @@ handle_snapshot(State, Connection) ->
             end
     end.
 
--file("src\\server\\router.gleam", 596).
+-file("src\\server\\router.gleam", 611).
 -spec send_command_result(ws_state(), mist@internal@websocket:websocket_connection(), gleam@erlang@process:subject({ok, nil} | {error, binary()})) -> mist:next(ws_state(), nil).
 send_command_result(State, Connection, Reply) ->
     case gleam@erlang@process:'receive'(Reply, 1000) of
@@ -136,7 +152,7 @@ send_command_result(State, Connection, Reply) ->
             send_and_continue(State, Connection, {server_error, ~"World timeout."})
     end.
 
--file("src\\server\\router.gleam", 560).
+-file("src\\server\\router.gleam", 575).
 -spec handle_set_factory_product(ws_state(), mist@internal@websocket:websocket_connection(), integer(), server@messages:product_type()) -> mist:next(ws_state(), nil).
 handle_set_factory_product(State, Connection, Id, Product) ->
     case erlang:element(3, State) of
@@ -149,7 +165,7 @@ handle_set_factory_product(State, Connection, Id, Product) ->
             send_command_result(State, Connection, Reply)
     end.
 
--file("src\\server\\router.gleam", 518).
+-file("src\\server\\router.gleam", 533).
 -spec handle_spawn_vehicle(ws_state(), mist@internal@websocket:websocket_connection(), float(), float(), float(), float(), float()) -> mist:next(ws_state(), nil).
 handle_spawn_vehicle(State, Connection, X, Y, Tx, Ty, Speed) ->
     case erlang:element(3, State) of
@@ -162,7 +178,7 @@ handle_spawn_vehicle(State, Connection, X, Y, Tx, Ty, Speed) ->
             send_command_result(State, Connection, Reply)
     end.
 
--file("src\\server\\router.gleam", 480).
+-file("src\\server\\router.gleam", 495).
 -spec handle_build_structure(ws_state(), mist@internal@websocket:websocket_connection(), server@messages:building_type(), float(), float()) -> mist:next(ws_state(), nil).
 handle_build_structure(State, Connection, Building, X, Y) ->
     case erlang:element(3, State) of
@@ -175,7 +191,7 @@ handle_build_structure(State, Connection, Building, X, Y) ->
             send_command_result(State, Connection, Reply)
     end.
 
--file("src\\server\\router.gleam", 449).
+-file("src\\server\\router.gleam", 464).
 -spec handle_build_bank(ws_state(), mist@internal@websocket:websocket_connection(), float(), float()) -> mist:next(ws_state(), nil).
 handle_build_bank(State, Connection, X, Y) ->
     case erlang:element(3, State) of
@@ -188,7 +204,7 @@ handle_build_bank(State, Connection, X, Y) ->
             send_command_result(State, Connection, Reply)
     end.
 
--file("src\\server\\router.gleam", 624).
+-file("src\\server\\router.gleam", 639).
 -spec send_lobby_for(ws_state(), mist@internal@websocket:websocket_connection()) -> {ok, nil} | {error, binary()}.
 send_lobby_for(State, Connection) ->
     case erlang:element(3, State) of
@@ -216,7 +232,7 @@ send_lobby_for(State, Connection) ->
             end
     end.
 
--file("src\\server\\router.gleam", 367).
+-file("src\\server\\router.gleam", 382).
 -spec handle_lobby_leave(ws_state(), mist@internal@websocket:websocket_connection()) -> mist:next(ws_state(), nil).
 handle_lobby_leave(State, Connection) ->
     case erlang:element(3, State) of
@@ -240,7 +256,7 @@ handle_lobby_leave(State, Connection) ->
             end
     end.
 
--file("src\\server\\router.gleam", 312).
+-file("src\\server\\router.gleam", 327).
 -spec handle_lobby_start(ws_state(), mist@internal@websocket:websocket_connection()) -> mist:next(ws_state(), nil).
 handle_lobby_start(State, Connection) ->
     case erlang:element(3, State) of
@@ -264,7 +280,7 @@ handle_lobby_start(State, Connection) ->
             end
     end.
 
--file("src\\server\\router.gleam", 262).
+-file("src\\server\\router.gleam", 277).
 -spec handle_lobby_join(ws_state(), mist@internal@websocket:websocket_connection(), binary()) -> mist:next(ws_state(), nil).
 handle_lobby_join(State, Connection, Code) ->
     case erlang:element(3, State) of
@@ -287,7 +303,7 @@ handle_lobby_join(State, Connection, Code) ->
             end
     end.
 
--file("src\\server\\router.gleam", 212).
+-file("src\\server\\router.gleam", 227).
 -spec handle_lobby_create(ws_state(), mist@internal@websocket:websocket_connection(), binary()) -> mist:next(ws_state(), nil).
 handle_lobby_create(State, Connection, Mode) ->
     case erlang:element(3, State) of
@@ -310,14 +326,14 @@ handle_lobby_create(State, Connection, Mode) ->
             end
     end.
 
--file("src\\server\\router.gleam", 193).
+-file("src\\server\\router.gleam", 208).
 -spec handle_ping(ws_state(), mist@internal@websocket:websocket_connection()) -> mist:next(ws_state(), nil).
 handle_ping(State, Connection) ->
     _ = ignore_send(Connection, pong),
     _ = send_lobby_for(State, Connection),
     mist:continue(State).
 
--file("src\\server\\router.gleam", 104).
+-file("src\\server\\router.gleam", 119).
 -spec handle_join(ws_state(), mist@internal@websocket:websocket_connection(), binary()) -> mist:next(ws_state(), nil).
 handle_join(State, Connection, Token) ->
     case erlang:element(3, State) of
@@ -360,7 +376,7 @@ handle_join(State, Connection, Token) ->
             end
     end.
 
--file("src\\server\\router.gleam", 46).
+-file("src\\server\\router.gleam", 61).
 -spec handle_ws(ws_state(), mist:websocket_message(nil), mist@internal@websocket:websocket_connection()) -> mist:next(ws_state(), nil).
 handle_ws(State, Message, Connection) ->
     case Message of
@@ -413,7 +429,7 @@ handle_ws(State, Message, Connection) ->
             mist:continue(State)
     end.
 
--file("src\\server\\router.gleam", 17).
+-file("src\\server\\router.gleam", 32).
 -spec handle(gleam@http@request:request(mist@internal@http:connection()), gleam@erlang@process:subject(game_server:message())) -> gleam@http@response:response(mist:response_data()).
 handle(Request, World) ->
     case erlang:element(8, Request) of

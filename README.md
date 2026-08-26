@@ -36,6 +36,10 @@ Writes run on a background process so they never block the game loop. They are a
 
 The default development server listens on `0.0.0.0:8765`. For production Web, expose it behind HTTPS and use `wss://` for the browser WebSocket connection.
 
+### CORS
+
+The `/auth/login` and `/auth/register` endpoints send an `Access-Control-Allow-Origin` header so a browser client can call them. By default this is `*` (any origin), which is convenient for local development but should not be used in production. Set the `ALLOWED_ORIGIN` environment variable to your deployed Web origin (e.g. `https://play.example.com`) before starting the server to restrict it.
+
 ## Desktop development
 
 Set `GAME_SERVER_URL` when the server is not on `127.0.0.1:8765` and run the Bevy client normally.

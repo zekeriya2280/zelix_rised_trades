@@ -4,7 +4,7 @@ version = "0.1.0"
 edition = "2024"
 
 [lib]
-name = "game_client"
+name = "game_client_lib"
 crate-type = ["lib", "cdylib"]
 
 [dependencies]

@@ -1,1 +1,1 @@
-fn main() { game_client::run(); }
+fn main() { game_client_lib::run(); }

@@ -68,8 +68,8 @@ pub fn factory_product_selected_system(
 pub fn update_logistics_hint_system(
     selection: Res<LogisticsSelection>,
     mut hint: Query<&mut Text, With<crate::render::ui::LogisticsHintText>>,
-    authority: Res<OnlineAuthority>,
-    network: Res<NetworkClient>,
+    _authority: Res<OnlineAuthority>,
+    _network: Res<NetworkClient>,
 ) {
     let msg = match selection.phase {
         SelectionPhase::Idle => String::new(),
@@ -278,7 +278,7 @@ pub fn cleanup_finished_delivery_system(
 }
 
 /// Mark every cell under a building's 2x2 footprint as blocked.
-fn collect_cells(
+pub fn collect_cells(
     terrain: &TerrainGrid,
     world: Vec2,
     out: &mut HashSet<(usize, usize)>,
@@ -300,7 +300,7 @@ fn within_box(point: Vec2, center: Vec2, half: f32) -> bool {
     (point.x - center.x).abs() <= half && (point.y - center.y).abs() <= half
 }
 
-fn spawn_segment(commands: &mut Commands, a: Vec2, b: Vec2) -> Entity {
+pub fn spawn_segment(commands: &mut Commands, a: Vec2, b: Vec2) -> Entity {
     let delta = b - a;
     let length = delta.length();
     if length < 0.001 {
