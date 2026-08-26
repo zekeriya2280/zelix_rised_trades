@@ -51,3 +51,15 @@ Also scanned the whole `game_client` crate for any other dangling `add_systems` 
 - Added cleanup of server-owned ECS entities when leaving online mode.
 - Added CORS support for Web auth requests.
 - Added an Android GameActivity Gradle host and asset packaging.
+
+## Deep fix pass — 2026-08-26
+
+- Reset WebSocket connection state on server/protocol errors so reconnect cannot deadlock in `connecting`.
+- Added explicit disconnect signalling for native/WASM auth-send failures.
+- Removed the single-started-room server restriction. Room start/reset now scopes entity cleanup to that room's players.
+- Scoped world snapshots to the requesting player's room instead of exposing unrelated room entities.
+- Persist room player/start lifecycle metadata to Firestore on create/join/start/leave.
+- Added Firebase environment-variable configuration (`FIREBASE_API_KEY`, `FIREBASE_PROJECT_ID`).
+- Hardened Android release builds to require an explicit server URL; debug retains emulator defaults.
+- Hardened Web build URL configuration and verification scripts.
+- Added a regression test for the WebSocket connection-error state machine.

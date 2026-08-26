@@ -1,11 +1,10 @@
 use bevy::prelude::*;
 
 use crate::core::{PathFollower, Vehicle};
-use crate::network::websocket::ServerOwned;
 
 pub fn logistics_tick_system(
     time: Res<Time>,
-    mut query: Query<(&mut Transform, &Vehicle, &mut PathFollower), Without<ServerOwned>>,
+    mut query: Query<(&mut Transform, &Vehicle, &mut PathFollower)>,
 ) {
     let dt = time.delta_secs();
 

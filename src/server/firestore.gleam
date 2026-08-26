@@ -26,8 +26,23 @@ pub fn save_room(
   host_id: Int,
   mode: String,
   player_ids: List(Int),
+  started: Bool,
 ) -> Nil {
-  spawn_write(auth_token, "rooms", code, room_fields(code, host_id, mode, player_ids))
+  spawn_write(auth_token, "rooms", code, room_fields(code, host_id, mode, player_ids, started))
+}
+
+/// Best-effort deletion of room metadata when the last player leaves.
+pub fn delete_room(auth_token: String, code: String) -> Nil {
+  let _ =
+    process.spawn(fn() {
+      case perform_delete(auth_token, "rooms", code) {
+        Ok(Nil) ->
+          io.println("[firestore] deleted rooms/" <> code)
+        Error(message) ->
+          io.println("[firestore] delete FAILED for rooms/" <> code <> ": " <> message)
+      }
+    })
+  Nil
 }
 
 /// Firestore document field values are typed objects, e.g.
@@ -61,12 +76,13 @@ fn room_fields(
   host_id: Int,
   mode: String,
   player_ids: List(Int),
+  started: Bool,
 ) -> json.Json {
   json.object([
     #("code", firestore_string(code)),
     #("host_id", firestore_int(host_id)),
     #("mode", firestore_string(mode)),
-    #("started", firestore_bool(False)),
+    #("started", firestore_bool(started)),
     #("players", firestore_array(list.map(player_ids, firestore_int))),
   ])
 }
@@ -134,6 +150,50 @@ fn perform_write(
             }
             Error(error) ->
               Error("Firestore request failed: " <> string.inspect(error))
+          }
+        }
+      }
+    }
+  }
+}
+fn perform_delete(
+  auth_token: String,
+  collection: String,
+  doc_id: String,
+) -> Result(Nil, String) {
+  case firebase_config.firebase_config() {
+    Error(message) -> Error(message)
+    Ok(config) -> {
+      let url =
+        firestore_endpoint
+          <> "/projects/"
+          <> config.project_id
+          <> "/databases/%28default%29/documents/"
+          <> collection
+          <> "/"
+          <> doc_id
+      case request.to(url) {
+        Error(_) -> Error("Could not parse Firestore delete URL.")
+        Ok(req0) -> {
+          let req =
+            req0
+            |> request.set_method(http.Delete)
+            |> request.prepend_header("authorization", "Bearer " <> auth_token)
+          case httpc.send(req) {
+            Ok(response) ->
+              case response.status {
+                200 | 204 -> Ok(Nil)
+                404 -> Ok(Nil)
+                code ->
+                  Error(
+                    "Firestore delete failed with status: "
+                      <> int.to_string(code)
+                      <> " body: "
+                      <> response.body,
+                  )
+              }
+            Error(error) ->
+              Error("Firestore delete request failed: " <> string.inspect(error))
           }
         }
       }

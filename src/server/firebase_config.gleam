@@ -6,6 +6,9 @@ import gleam/option
 @external(erlang, "game_server_os_ffi", "read_project_file")
 fn read_project_file(name: String) -> Result(BitArray, Nil)
 
+@external(erlang, "game_server_os_ffi", "get_env")
+fn get_env(name: String) -> Result(String, Nil)
+
 /// Shared Firebase server configuration. Authentication (identitytoolkit),
 /// Firestore, and any other Firebase REST calls all read the same values
 /// (`apiKey` + project id) from either `firebase_config.json` (Web config
@@ -15,13 +18,31 @@ pub type FirebaseConfig {
 }
 
 pub fn firebase_config() -> Result(FirebaseConfig, String) {
+  // Production deployments should prefer environment variables so secrets/config
+  // do not need to be committed to the repository. Files remain a convenient
+  // local-development fallback.
+  case get_env("FIREBASE_API_KEY") {
+    Ok(api_key) ->
+      case get_env("FIREBASE_PROJECT_ID") {
+        Ok(project_id) ->
+          case api_key == "" || project_id == "" {
+            True -> file_fallback()
+            False -> Ok(FirebaseConfig(api_key, project_id))
+          }
+        Error(_) -> file_fallback()
+      }
+    Error(_) -> file_fallback()
+  }
+}
+
+fn file_fallback() -> Result(FirebaseConfig, String) {
   case read_project_file("firebase_config.json") {
     Ok(bytes) -> decode_firebase_config(bytes)
     Error(_) -> case read_project_file("google-services.json") {
       Ok(bytes) -> decode_google_services_config(bytes)
       Error(_) ->
         Error(
-          "Firebase configuration not found. Put firebase_config.json or google-services.json in the project root.",
+          "Firebase configuration not found. Set FIREBASE_API_KEY and FIREBASE_PROJECT_ID, or provide firebase_config.json/google-services.json.",
         )
     }
   }

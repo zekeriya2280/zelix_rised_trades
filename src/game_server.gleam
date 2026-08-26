@@ -515,11 +515,11 @@ fn move_vehicle(vehicle: Vehicle) -> Vehicle {
   let Position(tx, ty) = vehicle.target
   let dx = tx -. x
   let dy = ty -. y
-  let d = distance(vehicle.position, vehicle.target)
+  let d_manhattan = float.absolute_value(dx) +. float.absolute_value(dy)
   let step = vehicle.speed *. 0.05
-  case d <=. step || d <=. 0.001 {
+  case d_manhattan <=. step || d_manhattan <=. 0.001 {
     True -> Vehicle(..vehicle, position: vehicle.target)
-    False -> Vehicle(..vehicle, position: Position(x +. dx /. d *. step, y +. dy /. d *. step))
+    False -> Vehicle(..vehicle, position: Position(x +. dx /. d_manhattan *. step, y +. dy /. d_manhattan *. step))
   }
 }
 
@@ -603,7 +603,7 @@ fn create_room(world: World, player_id: Int, mode: String) -> #(World, Result(St
         let room = Room(code, player_id, mode, [player_id], False)
         let host = get_player(world.players, player_id)
         firestore.save_player(host.auth_token, host.auth_uid, host.name)
-        firestore.save_room(host.auth_token, code, player_id, mode, [player_id])
+        firestore.save_room(host.auth_token, code, player_id, mode, [player_id], False)
         #(World(..world, rooms: [room, ..world.rooms], next_room_id: world.next_room_id + 1), Ok(code))
       }
     }
@@ -623,6 +623,8 @@ fn join_room(world: World, player_id: Int, code: String) -> #(World, Result(Stri
             True -> #(world, Error("Room is full."))
             False -> {
               let updated = Room(..room, players: [player_id, ..room.players])
+              let host = get_player(world.players, room.host_id)
+              firestore.save_room(host.auth_token, room.id, room.host_id, room.mode, updated.players, updated.started)
               #(replace_room(world, updated), Ok(room.id))
             }
           }
@@ -637,23 +639,22 @@ fn start_room(world: World, player_id: Int) -> #(World, Result(Nil, String)) {
     option.None -> #(world, Error("You are not in a room."))
     option.Some(room) -> case room.host_id == player_id {
       False -> #(world, Error("Only the host can start the room."))
-      True -> case any_started_room(world) {
-        True -> #(world, Error("A match is already running on this server. Please wait for it to finish."))
-        False -> case list.length(room.players) < 2 {
-          True -> #(world, Error("At least 2 players are required to start the room."))
-          False -> {
-            let prepared = reset_match_state(world, room.players)
-            #(replace_room(prepared, Room(..room, started: True)), Ok(Nil))
-          }
+      True -> case list.length(room.players) < 2 {
+        True -> #(world, Error("At least 2 players are required to start the room."))
+        False -> {
+          // Only reset state owned by this room. Other started rooms may be
+          // running concurrently on the same authoritative world process.
+          let prepared = reset_room_match_state(world, room.players)
+          let updated = Room(..room, started: True)
+          let host = get_player(prepared.players, room.host_id)
+          firestore.save_room(host.auth_token, room.id, room.host_id, room.mode, updated.players, True)
+          #(replace_room(prepared, updated), Ok(Nil))
         }
       }
     }
   }
 }
 
-fn any_started_room(world: World) -> Bool {
-  list.any(world.rooms, fn(room) { room.started })
-}
 
 fn leave_room(world: World, player_id: Int) -> #(World, Result(Nil, String)) {
   case player_room(world, player_id) {
@@ -661,14 +662,21 @@ fn leave_room(world: World, player_id: Int) -> #(World, Result(Nil, String)) {
     option.Some(room) -> {
       let players = list.filter(room.players, fn(id) { id != player_id })
       let world = case players {
-        [] -> reset_match_state(remove_room(world, room.id), room.players)
+        [] -> {
+          let last_player = get_player(world.players, player_id)
+          firestore.delete_room(last_player.auth_token, room.id)
+          reset_room_match_state(remove_room(world, room.id), room.players)
+        }
         _ -> {
           let cleaned = case room.started {
             True -> reset_player_match_state(world, player_id)
             False -> world
           }
           let new_host = case room.host_id == player_id { True -> hd(players) False -> room.host_id }
-          replace_room(cleaned, Room(..room, host_id: new_host, players: players))
+          let updated = Room(..room, host_id: new_host, players: players)
+          let host = get_player(cleaned.players, new_host)
+          firestore.save_room(host.auth_token, updated.id, updated.host_id, updated.mode, updated.players, updated.started)
+          replace_room(cleaned, updated)
         }
       }
       #(world, Ok(Nil))
@@ -695,24 +703,25 @@ fn reset_player_match_state(world: World, player_id: Int) -> World {
   )
 }
 
-fn reset_match_state(world: World, player_ids: List(Int)) -> World {
+fn reset_room_match_state(world: World, player_ids: List(Int)) -> World {
   let players = list.map(world.players, fn(player) {
     case list.any(player_ids, fn(id) { id == player.id }) {
       True -> Player(..player, money: starting_money, wood: 0, stone: 0, iron: 0, gold: 0, grain: 0)
       False -> player
     }
   })
+  let belongs_to_room = fn(owner_id: Int) {
+    list.any(player_ids, fn(id) { id == owner_id })
+  }
   World(
     ..world,
-    tick: 0,
-    next_id: 1,
     players: players,
-    banks: [],
-    factories: [],
-    warehouses: [],
-    gatherers: [],
-    farms: [],
-    vehicles: [],
+    banks: list.filter(world.banks, fn(item) { !belongs_to_room(item.owner_id) }),
+    factories: list.filter(world.factories, fn(item) { !belongs_to_room(item.owner_id) }),
+    warehouses: list.filter(world.warehouses, fn(item) { !belongs_to_room(item.owner_id) }),
+    gatherers: list.filter(world.gatherers, fn(item) { !belongs_to_room(item.owner_id) }),
+    farms: list.filter(world.farms, fn(item) { !belongs_to_room(item.owner_id) }),
+    vehicles: list.filter(world.vehicles, fn(item) { !belongs_to_room(item.owner_id) }),
   )
 }
 
@@ -799,6 +808,13 @@ pub fn snapshot_json(world: World, player_id: Int) -> Result(String, String) {
       let money = player_money(world, player_id)
       let inventory = inventory_json(player)
       let storage_capacity = player_storage_capacity(world, player_id)
+      let room_players = case player_room(world, player_id) {
+        option.Some(room) -> room.players
+        option.None -> [player_id]
+      }
+      let visible_owner = fn(owner_id: Int) {
+        list.any(room_players, fn(id) { id == owner_id })
+      }
       let data = json.object([
         #("tick", json.int(world.tick)),
         #("money", json.int(money)),
@@ -806,12 +822,12 @@ pub fn snapshot_json(world: World, player_id: Int) -> Result(String, String) {
         #("storage_used", json.int(inventory_total(player))),
         #("storage_capacity", json.int(storage_capacity)),
         #("in_game", json.bool(player_in_started_room(world, player_id))),
-        #("banks", json.array(world.banks, bank_json)),
-        #("factories", json.array(world.factories, factory_json)),
-        #("warehouses", json.array(world.warehouses, warehouse_json)),
-        #("gatherers", json.array(world.gatherers, simple_json)),
-        #("farms", json.array(world.farms, simple_json)),
-        #("vehicles", json.array(world.vehicles, vehicle_json)),
+        #("banks", json.array(list.filter(world.banks, fn(item) { visible_owner(item.owner_id) }), bank_json)),
+        #("factories", json.array(list.filter(world.factories, fn(item) { visible_owner(item.owner_id) }), factory_json)),
+        #("warehouses", json.array(list.filter(world.warehouses, fn(item) { visible_owner(item.owner_id) }), warehouse_json)),
+        #("gatherers", json.array(list.filter(world.gatherers, fn(item) { visible_owner(item.owner_id) }), simple_json)),
+        #("farms", json.array(list.filter(world.farms, fn(item) { visible_owner(item.owner_id) }), simple_json)),
+        #("vehicles", json.array(list.filter(world.vehicles, fn(item) { visible_owner(item.owner_id) }), vehicle_json)),
       ])
       let envelope = json.object([#("type", json.string("world_snapshot")), #("data", data)])
       Ok(envelope |> json.to_string)

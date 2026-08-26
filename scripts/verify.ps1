@@ -53,7 +53,10 @@ if ($Web) {
 
 if ($Android) {
     if (-not (Get-Command cargo-ndk -ErrorAction SilentlyContinue)) { throw "cargo-ndk is required for -Android." }
-    ./scripts/build-android.ps1
+    if ([string]::IsNullOrWhiteSpace($env:GAME_SERVER_URL)) {
+        throw "Set GAME_SERVER_URL to a reachable server before an Android verification build."
+    }
+    ./scripts/build-android.ps1 -ServerUrl $env:GAME_SERVER_URL
 }
 
 Write-Host "Verification completed successfully." -ForegroundColor Green

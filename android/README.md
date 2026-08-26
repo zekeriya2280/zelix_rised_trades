@@ -22,3 +22,9 @@ gradle assembleDebug
 ```
 
 The repository intentionally does not commit Gradle wrapper binaries or generated `jniLibs`/APK output.
+
+## Firebase
+
+The Android application does not use the Firebase Android SDK directly. Authentication is performed through the game's server REST API, which talks to Firebase Identity Toolkit. Therefore `android/app/google-services.json` is intentionally not required by Gradle.
+
+Configure Firebase on the server with `FIREBASE_API_KEY` and `FIREBASE_PROJECT_ID`, or with the server-side `firebase_config.json` / `google-services.json` described in the root README.

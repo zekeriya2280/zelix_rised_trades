@@ -161,7 +161,7 @@ pub fn setup_grid_lines(
     mut materials: ResMut<Assets<ColorMaterial>>,
 ) {
     let half = MAP_SIZE / 2.0;
-    let thickness = 1.0;
+    let thickness = 2.0;
 
     let line_count = GRID_SIZE + 1;
     let mut vertices: Vec<[f32; 3]> = Vec::with_capacity(line_count * 2 * 4);
@@ -184,7 +184,7 @@ pub fn setup_grid_lines(
 
     // Transparent material: routes this mesh into the blended Transparent 2D
     // phase so the lines are stable and never flicker against the terrain.
-    let grid_material = materials.add(ColorMaterial::from(Color::srgba(1.0, 1.0, 1.0, 0.14)));
+    let grid_material = materials.add(ColorMaterial::from(Color::srgba(0.0, 0.0, 0.0, 0.5)));
 
     commands.spawn((
         Mesh2d(meshes.add(mesh)),

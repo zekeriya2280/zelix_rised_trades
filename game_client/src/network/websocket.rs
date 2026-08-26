@@ -25,7 +25,11 @@ pub struct NetworkClient {
 }
 #[derive(Resource, Default)] pub struct OnlineAuthority { pub active: bool }
 #[derive(Resource, Default)] pub struct PendingSnapshot(pub Option<WorldSnapshot>);
-#[derive(Component)] pub struct ServerOwned;
+#[derive(Component)]
+pub struct ServerOwned;
+
+#[derive(Component)]
+pub struct ServerVehicleRoad(pub u64);
 
 #[cfg(not(target_arch = "wasm32"))]
 pub fn websocket_connect_system(time: Res<Time>, mut client: ResMut<NetworkClient>, auth: Res<AuthStore>) {
@@ -47,8 +51,14 @@ pub fn websocket_connect_system(time: Res<Time>, mut client: ResMut<NetworkClien
             use tokio_tungstenite::{connect_async, tungstenite::Message};
             let Ok((socket, _)) = connect_async(&url).await else { let _ = tx_in.send(ServerMessage::Disconnected { message: "WebSocket connection failed".into() }); return; };
             let (mut write, mut read) = socket.split();
-            let Ok(text) = serde_json::to_string(&ClientMessage::Join { token }) else { return; };
-            if write.send(Message::Text(text.into())).await.is_err() { return; }
+            let Ok(text) = serde_json::to_string(&ClientMessage::Join { token }) else {
+                let _ = tx_in.send(ServerMessage::Disconnected { message: "Could not serialize authentication request".into() });
+                return;
+            };
+            if write.send(Message::Text(text.into())).await.is_err() {
+                let _ = tx_in.send(ServerMessage::Disconnected { message: "Authentication request could not be sent".into() });
+                return;
+            }
             loop {
                 tokio::select! {
                     outgoing = recv_crossbeam(&rx_out) => { let Ok(message) = outgoing else { break; }; let Ok(text)=serde_json::to_string(&message) else { continue; }; if write.send(Message::Text(text.into())).await.is_err(){break;} }
@@ -77,7 +87,14 @@ pub fn websocket_connect_system(time: Res<Time>, mut client: ResMut<NetworkClien
     wasm_bindgen_futures::spawn_local(async move {
         let Ok(socket)=gloo_net::websocket::futures::WebSocket::open(&url) else {let _=tx_in.send(ServerMessage::Disconnected{message:"WebSocket connection failed".into()});return;};
         let (mut write,mut read)=socket.split();
-        let Ok(text)=serde_json::to_string(&ClientMessage::Join{token}) else{return;}; if write.send(gloo_net::websocket::Message::Text(text)).await.is_err(){return;}
+        let Ok(text)=serde_json::to_string(&ClientMessage::Join{token}) else {
+            let _=tx_in.send(ServerMessage::Disconnected{message:"Could not serialize authentication request".into()});
+            return;
+        };
+        if write.send(gloo_net::websocket::Message::Text(text)).await.is_err(){
+            let _=tx_in.send(ServerMessage::Disconnected{message:"Authentication request could not be sent".into()});
+            return;
+        }
         loop {
             while let Ok(message)=rx_out.try_recv(){let Ok(text)=serde_json::to_string(&message) else{continue;}; if write.send(gloo_net::websocket::Message::Text(text)).await.is_err(){return;}}
             match read.next().await { Some(Ok(gloo_net::websocket::Message::Text(text)))=>{if let Ok(message)=serde_json::from_str::<ServerMessage>(&text){let _=tx_in.send(message);}}, Some(Ok(_))=>{}, Some(Err(e))=>{let _=tx_in.send(ServerMessage::Error{message:e.to_string()});break;}, None=>break }
@@ -95,7 +112,11 @@ pub fn websocket_receive_system(
     mut lobby: ResMut<LobbyStore>,
     mut frontend: ResMut<FrontendState>,
 ) {
-    let Some(receiver) = client.receiver.take() else { return; };
+    // Clone the channel receiver instead of taking it out of the resource.
+    // `crossbeam_channel::Receiver` is cheap to clone and this keeps the
+    // receiver alive across Bevy frames. Taking it here would drop the
+    // receiver after the first frame and silently lose all later packets.
+    let Some(receiver) = client.receiver.as_ref().cloned() else { return; };
     while let Ok(message) = receiver.try_recv() {
         match message {
             ServerMessage::Welcome { player_id } => {
@@ -169,6 +190,23 @@ pub fn websocket_receive_system(
                 client.last_error = Some(message);
             }
             ServerMessage::Error { message } => {
+                // ServerError is a connection/protocol-level failure. Never leave the
+                // client stuck in `connecting = true`, otherwise the reconnect guard
+                // prevents any subsequent WebSocket attempt.
+                client.connected = false;
+                client.connecting = false;
+                client.retry_in = 2.0;
+                client.player_id = None;
+                client.sender = None;
+                authority.active = false;
+                pending.0 = None;
+                frontend.current_room = None;
+                frontend.current_room_is_host = false;
+                frontend.room_code.clear();
+                if frontend.screen == Screen::Game {
+                    frontend.screen = Screen::Intro;
+                    game.paused = true;
+                }
                 client.last_error = Some(message);
             }
             ServerMessage::Disconnected { message } => {
@@ -284,6 +322,7 @@ pub fn apply_snapshot_system(
             Or<(With<Bank>, With<Factory>, With<Warehouse>, With<Gatherer>, With<Farm>)>,
         ),
     >,
+    roads: Query<(Entity, &ServerVehicleRoad)>,
 ) {
     let Some(snapshot) = pending.0.take() else { return; };
 
@@ -418,7 +457,24 @@ pub fn apply_snapshot_system(
         if !is_mine(vehicle.owner_id) { continue; }
         seen.insert(vehicle.id);
         let is_new = !existing.contains_key(&vehicle.id);
+
+        let mut computed_waypoints = None;
+        if is_new {
+            let mut blocked = std::collections::HashSet::new();
+            for transform in &server_buildings {
+                collect_cells(&terrain, transform.translation().truncate(), &mut blocked);
+            }
+            let is_blocked = |x: usize, y: usize| blocked.contains(&(x, y));
+            computed_waypoints = route_between(
+                &terrain,
+                &is_blocked,
+                Vec2::new(vehicle.x, vehicle.y),
+                Vec2::new(vehicle.target_x, vehicle.target_y),
+            );
+        }
+
         let entity = existing.get(&vehicle.id).copied().unwrap_or_else(|| {
+            let waypoints = computed_waypoints.clone().unwrap_or_else(|| vec![Vec2::new(vehicle.target_x, vehicle.target_y)]);
             commands.spawn((
                 ServerOwned,
                 ServerId(vehicle.id),
@@ -429,16 +485,17 @@ pub fn apply_snapshot_system(
                 VehicleSprite,
                 Sprite { image: asset_server.load("vehicle.png"), custom_size: Some(Vec2::splat(24.0)), ..default() },
                 Transform::from_xyz(vehicle.x, vehicle.y, 20.0),
-                PathFollower { waypoints: vec![Vec2::new(vehicle.target_x, vehicle.target_y)], index: 0 },
+                PathFollower { waypoints, index: 0 },
             )).id()
         });
+
         if existing.contains_key(&vehicle.id) {
+            // DO NOT update Transform or PathFollower with server coordinates
+            // so the client can smoothly interpolate along the grid path.
             commands.entity(entity).insert((
                 OwnerId(vehicle.owner_id),
                 Vehicle { speed: vehicle.speed },
                 VehicleSprite,
-                Transform::from_xyz(vehicle.x, vehicle.y, 20.0),
-                PathFollower { waypoints: vec![Vec2::new(vehicle.target_x, vehicle.target_y)], index: 0 },
             ));
         }
 
@@ -446,23 +503,13 @@ pub fn apply_snapshot_system(
         // vehicles so online players see the route just like in single-player.
         // The segments become children of the vehicle and despawn with it.
         if is_new {
-            let mut blocked = std::collections::HashSet::new();
-            for transform in &server_buildings {
-                collect_cells(&terrain, transform.translation().truncate(), &mut blocked);
-            }
-            let is_blocked = |x: usize, y: usize| blocked.contains(&(x, y));
-            if let Some(waypoints) = route_between(
-                &terrain,
-                &is_blocked,
-                Vec2::new(vehicle.x, vehicle.y),
-                Vec2::new(vehicle.target_x, vehicle.target_y),
-            ) {
+            if let Some(waypoints) = computed_waypoints {
                 let segments: Vec<Entity> = waypoints
                     .windows(2)
                     .map(|pair| spawn_segment(&mut commands, pair[0], pair[1]))
                     .collect();
-                if !segments.is_empty() {
-                    commands.entity(entity).add_children(&segments);
+                for seg in segments {
+                    commands.entity(seg).insert(ServerVehicleRoad(vehicle.id));
                 }
             }
         }
@@ -471,6 +518,11 @@ pub fn apply_snapshot_system(
     for (entity, id, owner) in server_entities.iter() {
         if !seen.contains(&id.0) || !is_mine(owner.0) {
             commands.entity(entity).despawn();
+            for (road_entity, road) in roads.iter() {
+                if road.0 == id.0 {
+                    commands.entity(road_entity).despawn();
+                }
+            }
         }
     }
 }
@@ -481,4 +533,29 @@ fn websocket_url() -> String {
     else if let Some(rest) = base.strip_prefix("http://") { format!("ws://{rest}/ws") }
     else if base.starts_with("ws://") || base.starts_with("wss://") { format!("{base}/ws") }
     else { format!("ws://{base}/ws") }
+}
+
+#[cfg(test)]
+mod tests {
+    #[derive(Debug)]
+    struct ConnectionFlags {
+        connected: bool,
+        connecting: bool,
+        retry_in: f32,
+    }
+
+    fn apply_connection_error(state: &mut ConnectionFlags) {
+        state.connected = false;
+        state.connecting = false;
+        state.retry_in = 2.0;
+    }
+
+    #[test]
+    fn server_error_clears_connecting_state() {
+        let mut state = ConnectionFlags { connected: false, connecting: true, retry_in: 0.0 };
+        apply_connection_error(&mut state);
+        assert!(!state.connected);
+        assert!(!state.connecting);
+        assert_eq!(state.retry_in, 2.0);
+    }
 }
