@@ -515,11 +515,11 @@ fn move_vehicle(vehicle: Vehicle) -> Vehicle {
   let Position(tx, ty) = vehicle.target
   let dx = tx -. x
   let dy = ty -. y
-  let d_manhattan = float.absolute_value(dx) +. float.absolute_value(dy)
+  let d = distance(vehicle.position, vehicle.target)
   let step = vehicle.speed *. 0.05
-  case d_manhattan <=. step || d_manhattan <=. 0.001 {
+  case d <=. step || d <=. 0.001 {
     True -> Vehicle(..vehicle, position: vehicle.target)
-    False -> Vehicle(..vehicle, position: Position(x +. dx /. d_manhattan *. step, y +. dy /. d_manhattan *. step))
+    False -> Vehicle(..vehicle, position: Position(x +. dx /. d *. step, y +. dy /. d *. step))
   }
 }
 
@@ -662,11 +662,7 @@ fn leave_room(world: World, player_id: Int) -> #(World, Result(Nil, String)) {
     option.Some(room) -> {
       let players = list.filter(room.players, fn(id) { id != player_id })
       let world = case players {
-        [] -> {
-          let last_player = get_player(world.players, player_id)
-          firestore.delete_room(last_player.auth_token, room.id)
-          reset_room_match_state(remove_room(world, room.id), room.players)
-        }
+        [] -> reset_room_match_state(remove_room(world, room.id), room.players)
         _ -> {
           let cleaned = case room.started {
             True -> reset_player_match_state(world, player_id)

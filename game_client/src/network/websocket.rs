@@ -25,11 +25,7 @@ pub struct NetworkClient {
 }
 #[derive(Resource, Default)] pub struct OnlineAuthority { pub active: bool }
 #[derive(Resource, Default)] pub struct PendingSnapshot(pub Option<WorldSnapshot>);
-#[derive(Component)]
-pub struct ServerOwned;
-
-#[derive(Component)]
-pub struct ServerVehicleRoad(pub u64);
+#[derive(Component)] pub struct ServerOwned;
 
 #[cfg(not(target_arch = "wasm32"))]
 pub fn websocket_connect_system(time: Res<Time>, mut client: ResMut<NetworkClient>, auth: Res<AuthStore>) {
@@ -112,11 +108,7 @@ pub fn websocket_receive_system(
     mut lobby: ResMut<LobbyStore>,
     mut frontend: ResMut<FrontendState>,
 ) {
-    // Clone the channel receiver instead of taking it out of the resource.
-    // `crossbeam_channel::Receiver` is cheap to clone and this keeps the
-    // receiver alive across Bevy frames. Taking it here would drop the
-    // receiver after the first frame and silently lose all later packets.
-    let Some(receiver) = client.receiver.as_ref().cloned() else { return; };
+    let Some(receiver) = client.receiver.take() else { return; };
     while let Ok(message) = receiver.try_recv() {
         match message {
             ServerMessage::Welcome { player_id } => {
@@ -322,7 +314,6 @@ pub fn apply_snapshot_system(
             Or<(With<Bank>, With<Factory>, With<Warehouse>, With<Gatherer>, With<Farm>)>,
         ),
     >,
-    roads: Query<(Entity, &ServerVehicleRoad)>,
 ) {
     let Some(snapshot) = pending.0.take() else { return; };
 
@@ -457,24 +448,7 @@ pub fn apply_snapshot_system(
         if !is_mine(vehicle.owner_id) { continue; }
         seen.insert(vehicle.id);
         let is_new = !existing.contains_key(&vehicle.id);
-
-        let mut computed_waypoints = None;
-        if is_new {
-            let mut blocked = std::collections::HashSet::new();
-            for transform in &server_buildings {
-                collect_cells(&terrain, transform.translation().truncate(), &mut blocked);
-            }
-            let is_blocked = |x: usize, y: usize| blocked.contains(&(x, y));
-            computed_waypoints = route_between(
-                &terrain,
-                &is_blocked,
-                Vec2::new(vehicle.x, vehicle.y),
-                Vec2::new(vehicle.target_x, vehicle.target_y),
-            );
-        }
-
         let entity = existing.get(&vehicle.id).copied().unwrap_or_else(|| {
-            let waypoints = computed_waypoints.clone().unwrap_or_else(|| vec![Vec2::new(vehicle.target_x, vehicle.target_y)]);
             commands.spawn((
                 ServerOwned,
                 ServerId(vehicle.id),
@@ -485,17 +459,16 @@ pub fn apply_snapshot_system(
                 VehicleSprite,
                 Sprite { image: asset_server.load("vehicle.png"), custom_size: Some(Vec2::splat(24.0)), ..default() },
                 Transform::from_xyz(vehicle.x, vehicle.y, 20.0),
-                PathFollower { waypoints, index: 0 },
+                PathFollower { waypoints: vec![Vec2::new(vehicle.target_x, vehicle.target_y)], index: 0 },
             )).id()
         });
-
         if existing.contains_key(&vehicle.id) {
-            // DO NOT update Transform or PathFollower with server coordinates
-            // so the client can smoothly interpolate along the grid path.
             commands.entity(entity).insert((
                 OwnerId(vehicle.owner_id),
                 Vehicle { speed: vehicle.speed },
                 VehicleSprite,
+                Transform::from_xyz(vehicle.x, vehicle.y, 20.0),
+                PathFollower { waypoints: vec![Vec2::new(vehicle.target_x, vehicle.target_y)], index: 0 },
             ));
         }
 
@@ -503,13 +476,23 @@ pub fn apply_snapshot_system(
         // vehicles so online players see the route just like in single-player.
         // The segments become children of the vehicle and despawn with it.
         if is_new {
-            if let Some(waypoints) = computed_waypoints {
+            let mut blocked = std::collections::HashSet::new();
+            for transform in &server_buildings {
+                collect_cells(&terrain, transform.translation().truncate(), &mut blocked);
+            }
+            let is_blocked = |x: usize, y: usize| blocked.contains(&(x, y));
+            if let Some(waypoints) = route_between(
+                &terrain,
+                &is_blocked,
+                Vec2::new(vehicle.x, vehicle.y),
+                Vec2::new(vehicle.target_x, vehicle.target_y),
+            ) {
                 let segments: Vec<Entity> = waypoints
                     .windows(2)
                     .map(|pair| spawn_segment(&mut commands, pair[0], pair[1]))
                     .collect();
-                for seg in segments {
-                    commands.entity(seg).insert(ServerVehicleRoad(vehicle.id));
+                if !segments.is_empty() {
+                    commands.entity(entity).add_children(&segments);
                 }
             }
         }
@@ -518,11 +501,6 @@ pub fn apply_snapshot_system(
     for (entity, id, owner) in server_entities.iter() {
         if !seen.contains(&id.0) || !is_mine(owner.0) {
             commands.entity(entity).despawn();
-            for (road_entity, road) in roads.iter() {
-                if road.0 == id.0 {
-                    commands.entity(road_entity).despawn();
-                }
-            }
         }
     }
 }

@@ -13,10 +13,7 @@ if ([string]::IsNullOrWhiteSpace($ServerUrl)) {
     }
     $ServerUrl = "http://10.0.2.2:8765"
 }
-if ($Profile -eq "release" -and $ServerUrl -notmatch '^https://') {
-    throw "Release ServerUrl must use https:// so browser/WebSocket traffic can use secure wss:// transport."
-}
-if ($Profile -eq "debug" -and $ServerUrl -notmatch '^https?://') {
+if ($Profile -eq "release" -and $ServerUrl -notmatch '^https?://') {
     throw "ServerUrl must start with http:// or https://."
 }
 $env:GAME_SERVER_URL=$ServerUrl
