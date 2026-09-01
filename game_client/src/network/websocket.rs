@@ -251,9 +251,11 @@ pub fn websocket_send_system(
 
     let Some(sender) = &client.sender else { return; };
 
-    if *snapshot_elapsed >= SNAPSHOT_INTERVAL_SECONDS {
+    if frontend.screen == Screen::Game && *snapshot_elapsed >= SNAPSHOT_INTERVAL_SECONDS {
         *snapshot_elapsed %= SNAPSHOT_INTERVAL_SECONDS;
         let _ = sender.send(ClientMessage::RequestSnapshot);
+    } else if frontend.screen != Screen::Game {
+        *snapshot_elapsed = 0.0;
     }
 
     if *keepalive_elapsed >= KEEPALIVE_INTERVAL_SECONDS {
@@ -263,12 +265,10 @@ pub fn websocket_send_system(
 
     // A Ping also answers with a fresh LobbyState on the server, so polling it
     // here keeps waiting-room members in sync with the host's Start Game.
-    if frontend.screen == Screen::Lobby && frontend.current_room.is_some()
-        && *lobby_elapsed >= LOBBY_POLL_INTERVAL_SECONDS
-    {
+    if frontend.screen == Screen::Lobby && *lobby_elapsed >= LOBBY_POLL_INTERVAL_SECONDS {
         *lobby_elapsed %= LOBBY_POLL_INTERVAL_SECONDS;
         let _ = sender.send(ClientMessage::Ping);
-    } else if !(frontend.screen == Screen::Lobby && frontend.current_room.is_some()) {
+    } else if frontend.screen != Screen::Lobby {
         *lobby_elapsed = 0.0;
     }
 }
@@ -507,10 +507,18 @@ pub fn apply_snapshot_system(
 
 fn websocket_url() -> String {
     let base = server_base().trim_end_matches('/').to_string();
-    if let Some(rest) = base.strip_prefix("https://") { format!("wss://{rest}/ws") }
-    else if let Some(rest) = base.strip_prefix("http://") { format!("ws://{rest}/ws") }
-    else if base.starts_with("ws://") || base.starts_with("wss://") { format!("{base}/ws") }
-    else { format!("ws://{base}/ws") }
+    if base.ends_with("/ws") {
+        return base;
+    }
+    if let Some(rest) = base.strip_prefix("https://") {
+        format!("wss://{rest}/ws")
+    } else if let Some(rest) = base.strip_prefix("http://") {
+        format!("ws://{rest}/ws")
+    } else if base.starts_with("ws://") || base.starts_with("wss://") {
+        format!("{base}/ws")
+    } else {
+        format!("ws://{base}/ws")
+    }
 }
 
 #[cfg(test)]

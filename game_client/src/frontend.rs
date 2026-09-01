@@ -102,6 +102,7 @@ pub struct FrontendState {
     pub lobby_panel: LobbyPanel,
     pub current_room: Option<String>,
     pub current_room_is_host: bool,
+    pub pending_auth_email: Option<String>,
 }
 
 impl Default for FrontendState {
@@ -122,6 +123,7 @@ impl Default for FrontendState {
             lobby_panel: LobbyPanel::Choice,
             current_room: None,
             current_room_is_host: false,
+            pending_auth_email: None,
         }
     }
 }
@@ -236,6 +238,7 @@ impl Plugin for FrontendPlugin {
                     update_mode_options_system,
                     refresh_room_list_system,
                     room_pick_system,
+                    mode_option_system,
                     sync_game_pause_system,
                 ),
             );
@@ -363,8 +366,10 @@ fn spawn_lobby(commands: &mut Commands) {
     });
     spawn_lobby_panel(commands, LobbyPanel::CreateRoom, "Online · Create Room", |l| {
         spawn_paragraph(l, "Create a room and then wait for players. Maximum 5 players.", MUTED);
-        spawn_paragraph(l, "Room ID: generated after Create Room", TEXT);
-        spawn_paragraph(l, "Players: 1 / 5", TEXT);
+        spawn_paragraph(l, "Game mode", ACCENT);
+        spawn_mode_option(l, "Online", LobbyMode::Online);
+        spawn_mode_option(l, "Multiplayer", LobbyMode::Multiplayer);
+        spawn_paragraph(l, "Room ID is generated automatically after Create Room.", TEXT);
         spawn_button(l, "Create Room", Action::LobbyCreate);
         spawn_button(l, "← Back to Online", Action::LobbySelectChoice);
     });
@@ -677,6 +682,18 @@ fn update_mode_options_system(
 
 /// Rebuilds the Enter Room panel's room list whenever the server's room set
 /// changes, so new rooms appear without restarting.
+fn mode_option_system(
+    mut state: ResMut<FrontendState>,
+    buttons: Query<(&Interaction, &ModeOption), (Changed<Interaction>, With<Button>)>,
+) {
+    for (interaction, option) in &buttons {
+        if *interaction == Interaction::Pressed {
+            state.active_lobby_mode = option.mode;
+            state.lobby_message = format!("Selected {} mode.", option.mode.label());
+        }
+    }
+}
+
 fn refresh_room_list_system(
     lobby: Res<LobbyStore>,
     container: Query<(Entity, &Children), With<RoomList>>,
@@ -857,28 +874,30 @@ fn keyboard_input_system(
             state.active_field = Some(next_field(focused, state.screen, reverse));
             continue;
         }
-                if keys.just_pressed(KeyCode::Enter) {
+        if keys.just_pressed(KeyCode::Enter) {
             // Enter submits the current screen's primary action (login / register)
             // to the server; the result arrives on the next frame poll.
             match state.screen {
                 Screen::Login => {
-                    let email = state.login_email.trim();
-                    let password = state.login_password.as_str();
+                    let email = state.login_email.trim().to_string();
+                    let password = state.login_password.clone();
                     if email.is_empty() || password.is_empty() {
                         state.message = String::from("Fill in email and password.");
                     } else {
-                        request_login(&client, email, password);
+                        state.pending_auth_email = Some(email.clone());
+                        request_login(&client, &email, &password);
                         state.message = String::from("Signing in...");
                     }
                 }
                 Screen::Register => {
-                    let email = state.register_email.trim();
-                    let password = state.register_password.as_str();
-                    let nickname = state.register_nickname.trim();
+                    let email = state.register_email.trim().to_string();
+                    let password = state.register_password.clone();
+                    let nickname = state.register_nickname.trim().to_string();
                     if email.is_empty() || password.is_empty() || nickname.is_empty() {
                         state.message = String::from("Email, password, and nickname are required.");
-                                        } else {
-                        request_register(&client, email, password, nickname);
+                    } else {
+                        state.pending_auth_email = Some(email.clone());
+                        request_register(&client, &email, &password, &nickname);
                         state.message = String::from("Creating account...");
                     }
                 }
@@ -957,6 +976,7 @@ fn screen_button_system(
     client: Res<AuthClient>,
     network: Res<NetworkClient>,
     lobby: Res<LobbyStore>,
+    mut exit_writer: MessageWriter<AppExit>,
     buttons: Query<(&Interaction, &ActionButton), (Changed<Interaction>, With<Button>)>,
 ) {
     for (interaction, button) in &buttons {
@@ -984,24 +1004,26 @@ fn screen_button_system(
                 game.paused = true;
             }
             Action::LoginSubmit => {
-                let email = state.login_email.trim();
-                let password = state.login_password.as_str();
+                let email = state.login_email.trim().to_string();
+                let password = state.login_password.clone();
                 if email.is_empty() || password.is_empty() {
                     state.message = String::from("Fill in email and password.");
                 } else {
-                                        request_login(&client, email, password);
+                    state.pending_auth_email = Some(email.clone());
+                    request_login(&client, &email, &password);
                     state.message = String::from("Signing in...");
                 }
                 game.paused = true;
             }
             Action::RegisterSubmit => {
-                let email = state.register_email.trim();
-                let password = state.register_password.as_str();
-                let nickname = state.register_nickname.trim();
+                let email = state.register_email.trim().to_string();
+                let password = state.register_password.clone();
+                let nickname = state.register_nickname.trim().to_string();
                 if email.is_empty() || password.is_empty() || nickname.is_empty() {
                     state.message = String::from("Email, password, and nickname are required.");
                 } else {
-                                        request_register(&client, email, password, nickname);
+                    state.pending_auth_email = Some(email.clone());
+                    request_register(&client, &email, &password, &nickname);
                     state.message = String::from("Creating account...");
                 }
                 game.paused = true;
@@ -1037,7 +1059,7 @@ fn screen_button_system(
                 game.paused = true;
             }
             Action::IntroQuit => {
-                std::process::exit(0);
+                exit_writer.write(AppExit::Success);
             }
             Action::LobbySelectCreate => {
                 state.lobby_panel = LobbyPanel::CreateRoom;

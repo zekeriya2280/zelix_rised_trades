@@ -63,3 +63,14 @@ Also scanned the whole `game_client` crate for any other dangling `add_systems` 
 - Hardened Android release builds to require an explicit server URL; debug retains emulator defaults.
 - Hardened Web build URL configuration and verification scripts.
 - Added a regression test for the WebSocket connection-error state machine.
+
+## Repair pass — 2026-08-28
+
+- Added real Create Room game-mode selectors; the existing mode UI helper is now mounted and clickable.
+- Reduced WebSocket snapshot traffic to gameplay only; lobby synchronization remains lightweight and ping-driven.
+- Kept lobby polling active while browsing the lobby so open-room lists refresh without requiring a room join.
+- Made WebSocket base URLs ending in `/ws` safe from accidental `/ws/ws` duplication.
+- Associated authentication responses with the request email instead of whichever auth screen happens to be visible when the response arrives.
+- Replaced the direct process exit path with Bevy `AppExit` for desktop/Web/Android portability.
+- Added Firebase config fallback discovery for common `google-services.json` project locations.
+- Kept generated build/target outputs out of the release ZIP.
