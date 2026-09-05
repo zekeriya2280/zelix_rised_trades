@@ -1,253 +1,331 @@
 -module(glisten@socket).
--compile([no_auto_import, nowarn_ignored, nowarn_unused_vars, nowarn_unused_function, nowarn_nomatch, inline]).
+-compile([no_auto_import, nowarn_unused_vars, nowarn_unused_function, nowarn_nomatch, inline]).
+-define(FILEPATH, "src/glisten/socket.gleam").
 -export([reason_to_string/1]).
 -export_type([socket_reason/0, listen_socket/0, socket/0]).
 
--type socket_reason() :: closed | timeout | badarg | terminated | eaddrinuse | eaddrnotavail | eafnosupport | ealready | econnaborted | econnrefused | econnreset | edestaddrreq | ehostdown | ehostunreach | einprogress | eisconn | emsgsize | enetdown | enetunreach | enopkg | enoprotoopt | enotconn | enotty | enotsock | eproto | eprotonosupport | eprototype | esocktnosupport | etimedout | ewouldblock | exbadport | exbadseq | eacces | eagain | ebadf | ebadmsg | ebusy | edeadlk | edeadlock | edquot | eexist | efault | efbig | eftype | eintr | einval | eio | eisdir | eloop | emfile | emlink | emultihop | enametoolong | enfile | enobufs | enodev | enolck | enolink | enoent | enomem | enospc | enosr | enostr | enosys | enotblk | enotdir | enotsup | enxio | eopnotsupp | eoverflow | eperm | epipe | erange | erofs | espipe | esrch | estale | etxtbsy | exdev.
+-type socket_reason() :: closed |
+    timeout |
+    badarg |
+    terminated |
+    eaddrinuse |
+    eaddrnotavail |
+    eafnosupport |
+    ealready |
+    econnaborted |
+    econnrefused |
+    econnreset |
+    edestaddrreq |
+    ehostdown |
+    ehostunreach |
+    einprogress |
+    eisconn |
+    emsgsize |
+    enetdown |
+    enetunreach |
+    enopkg |
+    enoprotoopt |
+    enotconn |
+    enotty |
+    enotsock |
+    eproto |
+    eprotonosupport |
+    eprototype |
+    esocktnosupport |
+    etimedout |
+    ewouldblock |
+    exbadport |
+    exbadseq |
+    eacces |
+    eagain |
+    ebadf |
+    ebadmsg |
+    ebusy |
+    edeadlk |
+    edeadlock |
+    edquot |
+    eexist |
+    efault |
+    efbig |
+    eftype |
+    eintr |
+    einval |
+    eio |
+    eisdir |
+    eloop |
+    emfile |
+    emlink |
+    emultihop |
+    enametoolong |
+    enfile |
+    enobufs |
+    enodev |
+    enolck |
+    enolink |
+    enoent |
+    enomem |
+    enospc |
+    enosr |
+    enostr |
+    enosys |
+    enotblk |
+    enotdir |
+    enotsup |
+    enxio |
+    eopnotsupp |
+    eoverflow |
+    eperm |
+    epipe |
+    erange |
+    erofs |
+    espipe |
+    esrch |
+    estale |
+    etxtbsy |
+    exdev.
 
 -type listen_socket() :: any().
 
 -type socket() :: any().
 
--file("src\\glisten\\socket.gleam", 87).
+-file("src/glisten/socket.gleam", 87).
 -spec reason_to_string(socket_reason()) -> binary().
 reason_to_string(Reason) ->
     case Reason of
         closed ->
-            ~"Closed";
+            <<"Closed"/utf8>>;
 
         timeout ->
-            ~"Timeout";
+            <<"Timeout"/utf8>>;
 
         badarg ->
-            ~"Badarg";
+            <<"Badarg"/utf8>>;
 
         terminated ->
-            ~"Terminated";
+            <<"Terminated"/utf8>>;
 
         eaddrinuse ->
-            ~"Eaddrinuse";
+            <<"Eaddrinuse"/utf8>>;
 
         eaddrnotavail ->
-            ~"Eaddrnotavail";
+            <<"Eaddrnotavail"/utf8>>;
 
         eafnosupport ->
-            ~"Eafnosupport";
+            <<"Eafnosupport"/utf8>>;
 
         ealready ->
-            ~"Ealready";
+            <<"Ealready"/utf8>>;
 
         econnaborted ->
-            ~"Econnaborted";
+            <<"Econnaborted"/utf8>>;
 
         econnrefused ->
-            ~"Econnrefused";
+            <<"Econnrefused"/utf8>>;
 
         econnreset ->
-            ~"Econnreset";
+            <<"Econnreset"/utf8>>;
 
         edestaddrreq ->
-            ~"Edestaddrreq";
+            <<"Edestaddrreq"/utf8>>;
 
         ehostdown ->
-            ~"Ehostdown";
+            <<"Ehostdown"/utf8>>;
 
         ehostunreach ->
-            ~"Ehostunreach";
+            <<"Ehostunreach"/utf8>>;
 
         einprogress ->
-            ~"Einprogress";
+            <<"Einprogress"/utf8>>;
 
         eisconn ->
-            ~"Eisconn";
+            <<"Eisconn"/utf8>>;
 
         emsgsize ->
-            ~"Emsgsize";
+            <<"Emsgsize"/utf8>>;
 
         enetdown ->
-            ~"Enetdown";
+            <<"Enetdown"/utf8>>;
 
         enetunreach ->
-            ~"Enetunreach";
+            <<"Enetunreach"/utf8>>;
 
         enopkg ->
-            ~"Enopkg";
+            <<"Enopkg"/utf8>>;
 
         enoprotoopt ->
-            ~"Enoprotoopt";
+            <<"Enoprotoopt"/utf8>>;
 
         enotconn ->
-            ~"Enotconn";
+            <<"Enotconn"/utf8>>;
 
         enotty ->
-            ~"Enotty";
+            <<"Enotty"/utf8>>;
 
         enotsock ->
-            ~"Enotsock";
+            <<"Enotsock"/utf8>>;
 
         eproto ->
-            ~"Eproto";
+            <<"Eproto"/utf8>>;
 
         eprotonosupport ->
-            ~"Eprotonosupport";
+            <<"Eprotonosupport"/utf8>>;
 
         eprototype ->
-            ~"Eprototype";
+            <<"Eprototype"/utf8>>;
 
         esocktnosupport ->
-            ~"Esocktnosupport";
+            <<"Esocktnosupport"/utf8>>;
 
         etimedout ->
-            ~"Etimedout";
+            <<"Etimedout"/utf8>>;
 
         ewouldblock ->
-            ~"Ewouldblock";
+            <<"Ewouldblock"/utf8>>;
 
         exbadport ->
-            ~"Exbadport";
+            <<"Exbadport"/utf8>>;
 
         exbadseq ->
-            ~"Exbadseq";
+            <<"Exbadseq"/utf8>>;
 
         eacces ->
-            ~"Eacces";
+            <<"Eacces"/utf8>>;
 
         eagain ->
-            ~"Eagain";
+            <<"Eagain"/utf8>>;
 
         ebadf ->
-            ~"Ebadf";
+            <<"Ebadf"/utf8>>;
 
         ebadmsg ->
-            ~"Ebadmsg";
+            <<"Ebadmsg"/utf8>>;
 
         ebusy ->
-            ~"Ebusy";
+            <<"Ebusy"/utf8>>;
 
         edeadlk ->
-            ~"Edeadlk";
+            <<"Edeadlk"/utf8>>;
 
         edeadlock ->
-            ~"Edeadlock";
+            <<"Edeadlock"/utf8>>;
 
         edquot ->
-            ~"Edquot";
+            <<"Edquot"/utf8>>;
 
         eexist ->
-            ~"Eexist";
+            <<"Eexist"/utf8>>;
 
         efault ->
-            ~"Efault";
+            <<"Efault"/utf8>>;
 
         efbig ->
-            ~"Efbig";
+            <<"Efbig"/utf8>>;
 
         eftype ->
-            ~"Eftype";
+            <<"Eftype"/utf8>>;
 
         eintr ->
-            ~"Eintr";
+            <<"Eintr"/utf8>>;
 
         einval ->
-            ~"Einval";
+            <<"Einval"/utf8>>;
 
         eio ->
-            ~"Eio";
+            <<"Eio"/utf8>>;
 
         eisdir ->
-            ~"Eisdir";
+            <<"Eisdir"/utf8>>;
 
         eloop ->
-            ~"Eloop";
+            <<"Eloop"/utf8>>;
 
         emfile ->
-            ~"Emfile";
+            <<"Emfile"/utf8>>;
 
         emlink ->
-            ~"Emlink";
+            <<"Emlink"/utf8>>;
 
         emultihop ->
-            ~"Emultihop";
+            <<"Emultihop"/utf8>>;
 
         enametoolong ->
-            ~"Enametoolong";
+            <<"Enametoolong"/utf8>>;
 
         enfile ->
-            ~"Enfile";
+            <<"Enfile"/utf8>>;
 
         enobufs ->
-            ~"Enobufs";
+            <<"Enobufs"/utf8>>;
 
         enodev ->
-            ~"Enodev";
+            <<"Enodev"/utf8>>;
 
         enolck ->
-            ~"Enolck";
+            <<"Enolck"/utf8>>;
 
         enolink ->
-            ~"Enolink";
+            <<"Enolink"/utf8>>;
 
         enoent ->
-            ~"Enoent";
+            <<"Enoent"/utf8>>;
 
         enomem ->
-            ~"Enomem";
+            <<"Enomem"/utf8>>;
 
         enospc ->
-            ~"Enospc";
+            <<"Enospc"/utf8>>;
 
         enosr ->
-            ~"Enosr";
+            <<"Enosr"/utf8>>;
 
         enostr ->
-            ~"Enostr";
+            <<"Enostr"/utf8>>;
 
         enosys ->
-            ~"Enosys";
+            <<"Enosys"/utf8>>;
 
         enotblk ->
-            ~"Enotblk";
+            <<"Enotblk"/utf8>>;
 
         enotdir ->
-            ~"Enotdir";
+            <<"Enotdir"/utf8>>;
 
         enotsup ->
-            ~"Enotsup";
+            <<"Enotsup"/utf8>>;
 
         enxio ->
-            ~"Enxio";
+            <<"Enxio"/utf8>>;
 
         eopnotsupp ->
-            ~"Eopnotsupp";
+            <<"Eopnotsupp"/utf8>>;
 
         eoverflow ->
-            ~"Eoverflow";
+            <<"Eoverflow"/utf8>>;
 
         eperm ->
-            ~"Eperm";
+            <<"Eperm"/utf8>>;
 
         epipe ->
-            ~"Epipe";
+            <<"Epipe"/utf8>>;
 
         erange ->
-            ~"Erange";
+            <<"Erange"/utf8>>;
 
         erofs ->
-            ~"Erofs";
+            <<"Erofs"/utf8>>;
 
         espipe ->
-            ~"Espipe";
+            <<"Espipe"/utf8>>;
 
         esrch ->
-            ~"Esrch";
+            <<"Esrch"/utf8>>;
 
         estale ->
-            ~"Estale";
+            <<"Estale"/utf8>>;
 
         etxtbsy ->
-            ~"Etxtbsy";
+            <<"Etxtbsy"/utf8>>;
 
         exdev ->
-            ~"Exdev"
+            <<"Exdev"/utf8>>
     end.
-

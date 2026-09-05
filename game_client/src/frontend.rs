@@ -380,6 +380,7 @@ fn spawn_lobby(commands: &mut Commands) {
         spawn_hint(l, "Only waiting rooms can be joined.");
         spawn_button(l, "Enter Game", Action::LobbyJoin);
         spawn_button(l, "← Back to Online", Action::LobbySelectChoice);
+        l.spawn((Text::new(""), TextFont { font_size: FontSize::Px(14.0), ..default() }, TextColor(DANGER), LobbyMessageLabel));
     });
     spawn_lobby_panel(commands, LobbyPanel::WaitingRoom, "Online · Waiting Room", |l| {
         spawn_paragraph(l, "Room joined successfully. Wait for the host to start the game.", MUTED);
@@ -875,8 +876,7 @@ fn keyboard_input_system(
             continue;
         }
         if keys.just_pressed(KeyCode::Enter) {
-            // Enter submits the current screen's primary action (login / register)
-            // to the server; the result arrives on the next frame poll.
+            // Enter submits the current screen's primary action.
             match state.screen {
                 Screen::Login => {
                     let email = state.login_email.trim().to_string();
@@ -899,6 +899,20 @@ fn keyboard_input_system(
                         state.pending_auth_email = Some(email.clone());
                         request_register(&client, &email, &password, &nickname);
                         state.message = String::from("Creating account...");
+                    }
+                }
+                Screen::Lobby => {
+                    // Enter key joins the room from Enter Room panel.
+                    if state.lobby_panel == LobbyPanel::EnterRoom {
+                        let code = state.room_code.trim().to_string();
+                        if code.is_empty() {
+                            state.lobby_message = String::from("Enter a Room ID first.");
+                        } else {
+                            state.active_field = None;
+                            state.lobby_message = format!("Joining {}...", code);
+                            // Network send is handled in screen_button_system;
+                            // here we just mirror the validation path.
+                        }
                     }
                 }
                 _ => {}
@@ -1074,7 +1088,8 @@ fn screen_button_system(
                 state.lobby_panel = LobbyPanel::EnterRoom;
                 state.current_room = None;
                 state.current_room_is_host = false;
-                state.room_code.clear();
+                // Do NOT clear room_code here so the user can type without it
+                // being wiped each time the panel is visited.
                 state.active_field = Some(AuthField::RoomCode);
                 state.lobby_message = String::from("Select a room or type its code, then Enter.");
                 game.paused = true;

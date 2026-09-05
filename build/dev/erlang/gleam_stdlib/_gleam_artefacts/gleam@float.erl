@@ -1,78 +1,93 @@
 -module(gleam@float).
--compile([no_auto_import, nowarn_ignored, nowarn_unused_vars, nowarn_unused_function, nowarn_nomatch, inline]).
+-compile([no_auto_import, nowarn_unused_vars, nowarn_unused_function, nowarn_nomatch, inline]).
+-define(FILEPATH, "src/gleam/float.gleam").
 -export([parse/1, to_string/1, max/2, min/2, clamp/3, compare/2, absolute_value/1, loosely_compare/3, loosely_equals/3, ceiling/1, floor/1, negate/1, round/1, truncate/1, to_precision/2, power/2, square_root/1, sum/1, product/1, random/0, modulo/2, divide/2, add/2, multiply/2, subtract/2, logarithm/1, exponential/1]).
--moduledoc(~" Functions for working with floats.
 
- ## Float representation
+-if(?OTP_RELEASE >= 27).
+-define(MODULEDOC(Str), -moduledoc(Str)).
+-define(DOC(Str), -doc(Str)).
+-else.
+-define(MODULEDOC(Str), -compile([])).
+-define(DOC(Str), -compile([])).
+-endif.
 
- Floats are represented as 64 bit floating point numbers on both the Erlang
- and JavaScript runtimes. The floating point behaviour is native to their
- respective runtimes, so their exact behaviour will be slightly different on
- the two runtimes.
+?MODULEDOC(
+    " Functions for working with floats.\n"
+    "\n"
+    " ## Float representation\n"
+    "\n"
+    " Floats are represented as 64 bit floating point numbers on both the Erlang\n"
+    " and JavaScript runtimes. The floating point behaviour is native to their\n"
+    " respective runtimes, so their exact behaviour will be slightly different on\n"
+    " the two runtimes.\n"
+    "\n"
+    " ### Infinity and NaN\n"
+    "\n"
+    " Under the JavaScript runtime, exceeding the maximum (or minimum)\n"
+    " representable value for a floating point value will result in Infinity (or\n"
+    " -Infinity). Should you try to divide two infinities you will get NaN as a\n"
+    " result.\n"
+    "\n"
+    " When running on BEAM, exceeding the maximum (or minimum) representable\n"
+    " value for a floating point value will raise an error.\n"
+    "\n"
+    " ## Division by zero\n"
+    "\n"
+    " Gleam runs on the Erlang virtual machine, which does not follow the IEEE\n"
+    " 754 standard for floating point arithmetic and does not have an `Infinity`\n"
+    " value.  In Erlang division by zero results in a crash, however Gleam does\n"
+    " not have partial functions and operators in core so instead division by zero\n"
+    " returns zero, a behaviour taken from Pony, Coq, and Lean.\n"
+    "\n"
+    " This may seem unexpected at first, but it is no less mathematically valid\n"
+    " than crashing or returning a special value. Division by zero is undefined\n"
+    " in mathematics.\n"
+).
 
- ### Infinity and NaN
-
- Under the JavaScript runtime, exceeding the maximum (or minimum)
- representable value for a floating point value will result in Infinity (or
- -Infinity). Should you try to divide two infinities you will get NaN as a
- result.
-
- When running on BEAM, exceeding the maximum (or minimum) representable
- value for a floating point value will raise an error.
-
- ## Division by zero
-
- Gleam runs on the Erlang virtual machine, which does not follow the IEEE
- 754 standard for floating point arithmetic and does not have an `Infinity`
- value.  In Erlang division by zero results in a crash, however Gleam does
- not have partial functions and operators in core so instead division by zero
- returns zero, a behaviour taken from Pony, Coq, and Lean.
-
- This may seem unexpected at first, but it is no less mathematically valid
- than crashing or returning a special value. Division by zero is undefined
- in mathematics.").
-
--file("src\\gleam\\float.gleam", 49).
+-file("src/gleam/float.gleam", 49).
+?DOC(
+    " Attempts to parse a string as a `Float`, returning `Error(Nil)` if it was\n"
+    " not possible.\n"
+    "\n"
+    " ## Examples\n"
+    "\n"
+    " ```gleam\n"
+    " assert parse(\"2.3\") == Ok(2.3)\n"
+    " ```\n"
+    "\n"
+    " ```gleam\n"
+    " assert parse(\"ABC\") == Error(Nil)\n"
+    " ```\n"
+).
 -spec parse(binary()) -> {ok, float()} | {error, nil}.
--doc(~" Attempts to parse a string as a `Float`, returning `Error(Nil)` if it was
- not possible.
-
- ## Examples
-
- ```gleam
- assert parse(\"2.3\") == Ok(2.3)
- ```
-
- ```gleam
- assert parse(\"ABC\") == Error(Nil)
- ```
-").
 parse(String) ->
     gleam_stdlib:parse_float(String).
 
--file("src\\gleam\\float.gleam", 61).
+-file("src/gleam/float.gleam", 61).
+?DOC(
+    " Returns the string representation of the provided `Float`.\n"
+    "\n"
+    " ## Examples\n"
+    "\n"
+    " ```gleam\n"
+    " assert to_string(2.3) == \"2.3\"\n"
+    " ```\n"
+).
 -spec to_string(float()) -> binary().
--doc(~" Returns the string representation of the provided `Float`.
-
- ## Examples
-
- ```gleam
- assert to_string(2.3) == \"2.3\"
- ```
-").
 to_string(X) ->
     gleam_stdlib:float_to_string(X).
 
--file("src\\gleam\\float.gleam", 192).
+-file("src/gleam/float.gleam", 192).
+?DOC(
+    " Compares two `Float`s, returning the larger of the two.\n"
+    "\n"
+    " ## Examples\n"
+    "\n"
+    " ```gleam\n"
+    " assert max(2.0, 2.3) == 2.3\n"
+    " ```\n"
+).
 -spec max(float(), float()) -> float().
--doc(~" Compares two `Float`s, returning the larger of the two.
-
- ## Examples
-
- ```gleam
- assert max(2.0, 2.3) == 2.3
- ```
-").
 max(A, B) ->
     case A > B of
         true ->
@@ -82,16 +97,17 @@ max(A, B) ->
             B
     end.
 
--file("src\\gleam\\float.gleam", 177).
+-file("src/gleam/float.gleam", 177).
+?DOC(
+    " Compares two `Float`s, returning the smaller of the two.\n"
+    "\n"
+    " ## Examples\n"
+    "\n"
+    " ```gleam\n"
+    " assert min(2.0, 2.3) == 2.0\n"
+    " ```\n"
+).
 -spec min(float(), float()) -> float().
--doc(~" Compares two `Float`s, returning the smaller of the two.
-
- ## Examples
-
- ```gleam
- assert min(2.0, 2.3) == 2.0
- ```
-").
 min(A, B) ->
     case A < B of
         true ->
@@ -101,25 +117,26 @@ min(A, B) ->
             B
     end.
 
--file("src\\gleam\\float.gleam", 80).
+-file("src/gleam/float.gleam", 80).
+?DOC(
+    " Restricts a float between two bounds.\n"
+    "\n"
+    " Note: If the `min` argument is larger than the `max` argument then they\n"
+    " will be swapped, so the minimum bound is always lower than the maximum\n"
+    " bound.\n"
+    "\n"
+    "\n"
+    " ## Examples\n"
+    "\n"
+    " ```gleam\n"
+    " assert clamp(1.2, min: 1.4, max: 1.6) == 1.4\n"
+    " ```\n"
+    "\n"
+    " ```gleam\n"
+    " assert clamp(1.2, min: 1.4, max: 0.6) == 1.2\n"
+    " ```\n"
+).
 -spec clamp(float(), float(), float()) -> float().
--doc(~" Restricts a float between two bounds.
-
- Note: If the `min` argument is larger than the `max` argument then they
- will be swapped, so the minimum bound is always lower than the maximum
- bound.
-
-
- ## Examples
-
- ```gleam
- assert clamp(1.2, min: 1.4, max: 1.6) == 1.4
- ```
-
- ```gleam
- assert clamp(1.2, min: 1.4, max: 0.6) == 1.2
- ```
-").
 clamp(X, Min_bound, Max_bound) ->
     case Min_bound >= Max_bound of
         true ->
@@ -133,21 +150,22 @@ clamp(X, Min_bound, Max_bound) ->
             max(_pipe@3, Min_bound)
     end.
 
--file("src\\gleam\\float.gleam", 100).
+-file("src/gleam/float.gleam", 100).
+?DOC(
+    " Compares two `Float`s, returning an `Order`:\n"
+    " `Lt` for lower than, `Eq` for equals, or `Gt` for greater than.\n"
+    "\n"
+    " ## Examples\n"
+    "\n"
+    " ```gleam\n"
+    " assert compare(2.0, 2.3) == Lt\n"
+    " ```\n"
+    "\n"
+    " To handle\n"
+    " [Floating Point Imprecision](https://en.wikipedia.org/wiki/Floating-point_arithmetic#Accuracy_problems)\n"
+    " you may use [`loosely_compare`](#loosely_compare) instead.\n"
+).
 -spec compare(float(), float()) -> gleam@order:order().
--doc(~" Compares two `Float`s, returning an `Order`:
- `Lt` for lower than, `Eq` for equals, or `Gt` for greater than.
-
- ## Examples
-
- ```gleam
- assert compare(2.0, 2.3) == Lt
- ```
-
- To handle
- [Floating Point Imprecision](https://en.wikipedia.org/wiki/Floating-point_arithmetic#Accuracy_problems)
- you may use [`loosely_compare`](#loosely_compare) instead.
-").
 compare(A, B) ->
     case A =:= B of
         true ->
@@ -163,20 +181,21 @@ compare(A, B) ->
             end
     end.
 
--file("src\\gleam\\float.gleam", 302).
+-file("src/gleam/float.gleam", 302).
+?DOC(
+    " Returns the absolute value of the input as a `Float`.\n"
+    "\n"
+    " ## Examples\n"
+    "\n"
+    " ```gleam\n"
+    " assert absolute_value(-12.5) == 12.5\n"
+    " ```\n"
+    "\n"
+    " ```gleam\n"
+    " assert absolute_value(10.2) == 10.2\n"
+    " ```\n"
+).
 -spec absolute_value(float()) -> float().
--doc(~" Returns the absolute value of the input as a `Float`.
-
- ## Examples
-
- ```gleam
- assert absolute_value(-12.5) == 12.5
- ```
-
- ```gleam
- assert absolute_value(10.2) == 10.2
- ```
-").
 absolute_value(X) ->
     case X >= +0.0 of
         true ->
@@ -186,26 +205,27 @@ absolute_value(X) ->
             +0.0 - X
     end.
 
--file("src\\gleam\\float.gleam", 129).
+-file("src/gleam/float.gleam", 129).
+?DOC(
+    " Compares two `Float`s within a tolerance, returning an `Order`:\n"
+    " `Lt` for lower than, `Eq` for equals, or `Gt` for greater than.\n"
+    "\n"
+    " This function allows Float comparison while handling\n"
+    " [Floating Point Imprecision](https://en.wikipedia.org/wiki/Floating-point_arithmetic#Accuracy_problems).\n"
+    "\n"
+    " Notice: For `Float`s the tolerance won't be exact:\n"
+    " `5.3 - 5.0` is not exactly `0.3`.\n"
+    "\n"
+    " ## Examples\n"
+    "\n"
+    " ```gleam\n"
+    " assert loosely_compare(5.0, with: 5.3, tolerating: 0.5) == Eq\n"
+    " ```\n"
+    "\n"
+    " If you want to check only for equality you may use\n"
+    " [`loosely_equals`](#loosely_equals) instead.\n"
+).
 -spec loosely_compare(float(), float(), float()) -> gleam@order:order().
--doc(~" Compares two `Float`s within a tolerance, returning an `Order`:
- `Lt` for lower than, `Eq` for equals, or `Gt` for greater than.
-
- This function allows Float comparison while handling
- [Floating Point Imprecision](https://en.wikipedia.org/wiki/Floating-point_arithmetic#Accuracy_problems).
-
- Notice: For `Float`s the tolerance won't be exact:
- `5.3 - 5.0` is not exactly `0.3`.
-
- ## Examples
-
- ```gleam
- assert loosely_compare(5.0, with: 5.3, tolerating: 0.5) == Eq
- ```
-
- If you want to check only for equality you may use
- [`loosely_equals`](#loosely_equals) instead.
-").
 loosely_compare(A, B, Tolerance) ->
     Difference = absolute_value(A - B),
     case Difference =< Tolerance of
@@ -216,176 +236,176 @@ loosely_compare(A, B, Tolerance) ->
             compare(A, B)
     end.
 
--file("src\\gleam\\float.gleam", 160).
+-file("src/gleam/float.gleam", 160).
+?DOC(
+    " Checks for equality of two `Float`s within a tolerance,\n"
+    " returning a `Bool`.\n"
+    "\n"
+    " This function allows Float comparison while handling\n"
+    " [Floating Point Imprecision](https://en.wikipedia.org/wiki/Floating-point_arithmetic#Accuracy_problems).\n"
+    "\n"
+    " Notice: For `Float`s the tolerance won't be exact:\n"
+    " `5.3 - 5.0` is not exactly `0.3`.\n"
+    "\n"
+    " ## Examples\n"
+    "\n"
+    " ```gleam\n"
+    " assert loosely_equals(5.0, with: 5.3, tolerating: 0.5)\n"
+    " ```\n"
+    "\n"
+    " ```gleam\n"
+    " assert !loosely_equals(5.0, with: 5.1, tolerating: 0.1)\n"
+    " ```\n"
+).
 -spec loosely_equals(float(), float(), float()) -> boolean().
--doc(~" Checks for equality of two `Float`s within a tolerance,
- returning a `Bool`.
-
- This function allows Float comparison while handling
- [Floating Point Imprecision](https://en.wikipedia.org/wiki/Floating-point_arithmetic#Accuracy_problems).
-
- Notice: For `Float`s the tolerance won't be exact:
- `5.3 - 5.0` is not exactly `0.3`.
-
- ## Examples
-
- ```gleam
- assert loosely_equals(5.0, with: 5.3, tolerating: 0.5)
- ```
-
- ```gleam
- assert !loosely_equals(5.0, with: 5.1, tolerating: 0.1)
- ```
-").
 loosely_equals(A, B, Tolerance) ->
     Difference = absolute_value(A - B),
     Difference =< Tolerance.
 
--file("src\\gleam\\float.gleam", 209).
+-file("src/gleam/float.gleam", 209).
+?DOC(
+    " Rounds the value to the next highest whole number as a `Float`.\n"
+    "\n"
+    " ## Examples\n"
+    "\n"
+    " ```gleam\n"
+    " assert ceiling(2.3) == 3.0\n"
+    " ```\n"
+).
 -spec ceiling(float()) -> float().
--doc(~" Rounds the value to the next highest whole number as a `Float`.
-
- ## Examples
-
- ```gleam
- assert ceiling(2.3) == 3.0
- ```
-").
 ceiling(X) ->
     math:ceil(X).
 
--file("src\\gleam\\float.gleam", 221).
+-file("src/gleam/float.gleam", 221).
+?DOC(
+    " Rounds the value to the next lowest whole number as a `Float`.\n"
+    "\n"
+    " ## Examples\n"
+    "\n"
+    " ```gleam\n"
+    " assert floor(2.3) == 2.0\n"
+    " ```\n"
+).
 -spec floor(float()) -> float().
--doc(~" Rounds the value to the next lowest whole number as a `Float`.
-
- ## Examples
-
- ```gleam
- assert floor(2.3) == 2.0
- ```
-").
 floor(X) ->
     math:floor(X).
 
--file("src\\gleam\\float.gleam", 376).
+-file("src/gleam/float.gleam", 376).
+?DOC(
+    " Returns the negative of the value provided.\n"
+    "\n"
+    " ## Examples\n"
+    "\n"
+    " ```gleam\n"
+    " assert negate(1.0) == -1.0\n"
+    " ```\n"
+).
 -spec negate(float()) -> float().
--doc(~" Returns the negative of the value provided.
-
- ## Examples
-
- ```gleam
- assert negate(1.0) == -1.0
- ```
-").
 negate(X) ->
     -1.0 * X.
 
--file("src\\gleam\\float.gleam", 236).
+-file("src/gleam/float.gleam", 236).
+?DOC(
+    " Rounds the value to the nearest whole number as an `Int`.\n"
+    "\n"
+    " ## Examples\n"
+    "\n"
+    " ```gleam\n"
+    " assert round(2.3) == 2\n"
+    " ```\n"
+    "\n"
+    " ```gleam\n"
+    " assert round(2.5) == 3\n"
+    " ```\n"
+).
 -spec round(float()) -> integer().
--doc(~" Rounds the value to the nearest whole number as an `Int`.
-
- ## Examples
-
- ```gleam
- assert round(2.3) == 2
- ```
-
- ```gleam
- assert round(2.5) == 3
- ```
-").
 round(X) ->
     erlang:round(X).
 
--file("src\\gleam\\float.gleam", 256).
+-file("src/gleam/float.gleam", 256).
+?DOC(
+    " Returns the value as an `Int`, truncating all decimal digits.\n"
+    "\n"
+    " ## Examples\n"
+    "\n"
+    " ```gleam\n"
+    " assert truncate(2.4343434847383438) == 2\n"
+    " ```\n"
+).
 -spec truncate(float()) -> integer().
--doc(~" Returns the value as an `Int`, truncating all decimal digits.
-
- ## Examples
-
- ```gleam
- assert truncate(2.4343434847383438) == 2
- ```
-").
 truncate(X) ->
     erlang:trunc(X).
 
--file("src\\gleam\\float.gleam", 273).
+-file("src/gleam/float.gleam", 273).
+?DOC(
+    " Converts the value to a given precision as a `Float`.\n"
+    " The precision is the number of allowed decimal places.\n"
+    " Negative precisions are allowed and force rounding\n"
+    " to the nearest tenth, hundredth, thousandth etc.\n"
+    "\n"
+    " ## Examples\n"
+    "\n"
+    " ```gleam\n"
+    " assert to_precision(2.43434348473, 2) == 2.43\n"
+    " ```\n"
+    "\n"
+    " ```gleam\n"
+    " assert to_precision(547890.453444, -3) == 548000.0\n"
+    " ```\n"
+).
 -spec to_precision(float(), integer()) -> float().
--doc(~" Converts the value to a given precision as a `Float`.
- The precision is the number of allowed decimal places.
- Negative precisions are allowed and force rounding
- to the nearest tenth, hundredth, thousandth etc.
-
- ## Examples
-
- ```gleam
- assert to_precision(2.43434348473, 2) == 2.43
- ```
-
- ```gleam
- assert to_precision(547890.453444, -3) == 548000.0
- ```
-").
 to_precision(X, Precision) ->
     case Precision =< 0 of
         true ->
             Factor = math:pow(10.0, erlang:float(- Precision)),
             erlang:float(erlang:round(case Factor of
-                +0.0 ->
-                    +0.0;
-
-                -0.0 ->
-                    -0.0;
-
-                _value ->
-                    X / _value
-            end)) * Factor;
+                        +0.0 -> +0.0;
+                        -0.0 -> -0.0;
+                        Gleam@denominator -> X / Gleam@denominator
+                    end)) * Factor;
 
         false ->
             Factor@1 = math:pow(10.0, erlang:float(Precision)),
             case Factor@1 of
-                +0.0 ->
-                    +0.0;
-
-                -0.0 ->
-                    -0.0;
-
-                _value@1 ->
-                    erlang:float(erlang:round(X * Factor@1)) / _value@1
+                +0.0 -> +0.0;
+                -0.0 -> -0.0;
+                Gleam@denominator@1 -> erlang:float(erlang:round(X * Factor@1))
+                / Gleam@denominator@1
             end
     end.
 
--file("src\\gleam\\float.gleam", 334).
+-file("src/gleam/float.gleam", 334).
+?DOC(
+    " Returns the result of the base being raised to the power of the\n"
+    " exponent, as a `Float`.\n"
+    "\n"
+    " ## Examples\n"
+    "\n"
+    " ```gleam\n"
+    " assert power(2.0, -1.0) == Ok(0.5)\n"
+    " ```\n"
+    "\n"
+    " ```gleam\n"
+    " assert power(2.0, 2.0) == Ok(4.0)\n"
+    " ```\n"
+    "\n"
+    " ```gleam\n"
+    " assert power(8.0, 1.5) == Ok(22.627416997969522)\n"
+    " ```\n"
+    "\n"
+    " ```gleam\n"
+    " assert 4.0 |> power(of: 2.0) == Ok(16.0)\n"
+    " ```\n"
+    "\n"
+    " ```gleam\n"
+    " assert power(-1.0, 0.5) == Error(Nil)\n"
+    " ```\n"
+).
 -spec power(float(), float()) -> {ok, float()} | {error, nil}.
--doc(~" Returns the result of the base being raised to the power of the
- exponent, as a `Float`.
-
- ## Examples
-
- ```gleam
- assert power(2.0, -1.0) == Ok(0.5)
- ```
-
- ```gleam
- assert power(2.0, 2.0) == Ok(4.0)
- ```
-
- ```gleam
- assert power(8.0, 1.5) == Ok(22.627416997969522)
- ```
-
- ```gleam
- assert 4.0 |> power(of: 2.0) == Ok(16.0)
- ```
-
- ```gleam
- assert power(-1.0, 0.5) == Error(Nil)
- ```
-").
 power(Base, Exponent) ->
     Fractional = (math:ceil(Exponent) - Exponent) > +0.0,
-    case ((Base < +0.0) andalso Fractional) orelse ((Base =:= +0.0) andalso (Exponent < +0.0)) of
+    case ((Base < +0.0) andalso Fractional) orelse ((Base =:= +0.0) andalso (Exponent
+    < +0.0)) of
         true ->
             {error, nil};
 
@@ -393,24 +413,25 @@ power(Base, Exponent) ->
             {ok, math:pow(Base, Exponent)}
     end.
 
--file("src\\gleam\\float.gleam", 364).
+-file("src/gleam/float.gleam", 364).
+?DOC(
+    " Returns the square root of the input as a `Float`.\n"
+    "\n"
+    " ## Examples\n"
+    "\n"
+    " ```gleam\n"
+    " assert square_root(4.0) == Ok(2.0)\n"
+    " ```\n"
+    "\n"
+    " ```gleam\n"
+    " assert square_root(-16.0) == Error(Nil)\n"
+    " ```\n"
+).
 -spec square_root(float()) -> {ok, float()} | {error, nil}.
--doc(~" Returns the square root of the input as a `Float`.
-
- ## Examples
-
- ```gleam
- assert square_root(4.0) == Ok(2.0)
- ```
-
- ```gleam
- assert square_root(-16.0) == Error(Nil)
- ```
-").
 square_root(X) ->
     power(X, 0.5).
 
--file("src\\gleam\\float.gleam", 392).
+-file("src/gleam/float.gleam", 392).
 -spec sum_loop(list(float()), float()) -> float().
 sum_loop(Numbers, Initial) ->
     case Numbers of
@@ -421,20 +442,21 @@ sum_loop(Numbers, Initial) ->
             Initial
     end.
 
--file("src\\gleam\\float.gleam", 388).
+-file("src/gleam/float.gleam", 388).
+?DOC(
+    " Sums a list of `Float`s.\n"
+    "\n"
+    " ## Example\n"
+    "\n"
+    " ```gleam\n"
+    " assert sum([1.0, 2.2, 3.3]) == 6.5\n"
+    " ```\n"
+).
 -spec sum(list(float())) -> float().
--doc(~" Sums a list of `Float`s.
-
- ## Example
-
- ```gleam
- assert sum([1.0, 2.2, 3.3]) == 6.5
- ```
-").
 sum(Numbers) ->
     sum_loop(Numbers, +0.0).
 
--file("src\\gleam\\float.gleam", 411).
+-file("src/gleam/float.gleam", 411).
 -spec product_loop(list(float()), float()) -> float().
 product_loop(Numbers, Initial) ->
     case Numbers of
@@ -445,64 +467,67 @@ product_loop(Numbers, Initial) ->
             Initial
     end.
 
--file("src\\gleam\\float.gleam", 407).
+-file("src/gleam/float.gleam", 407).
+?DOC(
+    " Multiplies a list of `Float`s and returns the product.\n"
+    "\n"
+    " ## Example\n"
+    "\n"
+    " ```gleam\n"
+    " assert product([2.5, 3.2, 4.2]) == 33.6\n"
+    " ```\n"
+).
 -spec product(list(float())) -> float().
--doc(~" Multiplies a list of `Float`s and returns the product.
-
- ## Example
-
- ```gleam
- assert product([2.5, 3.2, 4.2]) == 33.6
- ```
-").
 product(Numbers) ->
     product_loop(Numbers, 1.0).
 
--file("src\\gleam\\float.gleam", 433).
+-file("src/gleam/float.gleam", 433).
+?DOC(
+    " Generates a random float between the given zero (inclusive) and one\n"
+    " (exclusive).\n"
+    "\n"
+    " On Erlang this updates the random state in the process dictionary.\n"
+    " See: <https://www.erlang.org/doc/man/rand.html#uniform-0>\n"
+    "\n"
+    " ## Examples\n"
+    "\n"
+    " ```gleam\n"
+    " random()\n"
+    " // -> 0.646355926896028\n"
+    " ```\n"
+).
 -spec random() -> float().
--doc(~" Generates a random float between the given zero (inclusive) and one
- (exclusive).
-
- On Erlang this updates the random state in the process dictionary.
- See: <https://www.erlang.org/doc/man/rand.html#uniform-0>
-
- ## Examples
-
- ```gleam
- random()
- // -> 0.646355926896028
- ```
-").
 random() ->
     rand:uniform().
 
--file("src\\gleam\\float.gleam", 460).
+-file("src/gleam/float.gleam", 460).
+?DOC(
+    " Computes the modulo of a float division of inputs as a `Result`.\n"
+    "\n"
+    " Returns division of the inputs as a `Result`: If the given divisor equals\n"
+    " `0`, this function returns an `Error`.\n"
+    "\n"
+    " The computed value will always have the same sign as the `divisor`.\n"
+    "\n"
+    " ## Examples\n"
+    "\n"
+    " ```gleam\n"
+    " assert modulo(13.3, by: 3.3) == Ok(0.1)\n"
+    " ```\n"
+    "\n"
+    " ```gleam\n"
+    " assert modulo(-13.3, by: 3.3) == Ok(3.2)\n"
+    " ```\n"
+    "\n"
+    " ```gleam\n"
+    " assert modulo(13.3, by: -3.3) == Ok(-3.2)\n"
+    " ```\n"
+    "\n"
+    " ```gleam\n"
+    " assert modulo(-13.3, by: -3.3) == Ok(-0.1)\n"
+    " ```\n"
+).
 -spec modulo(float(), float()) -> {ok, float()} | {error, nil}.
--doc(~" Computes the modulo of a float division of inputs as a `Result`.
-
- Returns division of the inputs as a `Result`: If the given divisor equals
- `0`, this function returns an `Error`.
-
- The computed value will always have the same sign as the `divisor`.
-
- ## Examples
-
- ```gleam
- assert modulo(13.3, by: 3.3) == Ok(0.1)
- ```
-
- ```gleam
- assert modulo(-13.3, by: 3.3) == Ok(3.2)
- ```
-
- ```gleam
- assert modulo(13.3, by: -3.3) == Ok(-3.2)
- ```
-
- ```gleam
- assert modulo(-13.3, by: -3.3) == Ok(-0.1)
- ```
-").
 modulo(Dividend, Divisor) ->
     case Divisor of
         +0.0 ->
@@ -510,31 +535,27 @@ modulo(Dividend, Divisor) ->
 
         _ ->
             {ok, Dividend - (math:floor(case Divisor of
-                +0.0 ->
-                    +0.0;
-
-                -0.0 ->
-                    -0.0;
-
-                _value ->
-                    Dividend / _value
-            end) * Divisor)}
+                        +0.0 -> +0.0;
+                        -0.0 -> -0.0;
+                        Gleam@denominator -> Dividend / Gleam@denominator
+                    end) * Divisor)}
     end.
 
--file("src\\gleam\\float.gleam", 479).
+-file("src/gleam/float.gleam", 479).
+?DOC(
+    " Returns division of the inputs as a `Result`.\n"
+    "\n"
+    " ## Examples\n"
+    "\n"
+    " ```gleam\n"
+    " assert divide(0.0, 1.0) == Ok(0.0)\n"
+    " ```\n"
+    "\n"
+    " ```gleam\n"
+    " assert divide(1.0, 0.0) == Error(Nil)\n"
+    " ```\n"
+).
 -spec divide(float(), float()) -> {ok, float()} | {error, nil}.
--doc(~" Returns division of the inputs as a `Result`.
-
- ## Examples
-
- ```gleam
- assert divide(0.0, 1.0) == Ok(0.0)
- ```
-
- ```gleam
- assert divide(1.0, 0.0) == Error(Nil)
- ```
-").
 divide(A, B) ->
     case B of
         +0.0 ->
@@ -542,122 +563,121 @@ divide(A, B) ->
 
         B@1 ->
             {ok, case B@1 of
-                +0.0 ->
-                    +0.0;
-
-                -0.0 ->
-                    -0.0;
-
-                _value ->
-                    A / _value
-            end}
+                    +0.0 -> +0.0;
+                    -0.0 -> -0.0;
+                    Gleam@denominator -> A / Gleam@denominator
+                end}
     end.
 
--file("src\\gleam\\float.gleam", 507).
+-file("src/gleam/float.gleam", 507).
+?DOC(
+    " Adds two floats together.\n"
+    "\n"
+    " It's the function equivalent of the `+.` operator.\n"
+    " This function is useful in higher order functions or pipes.\n"
+    "\n"
+    " ## Examples\n"
+    "\n"
+    " ```gleam\n"
+    " assert add(1.0, 2.0) == 3.0\n"
+    " ```\n"
+    "\n"
+    " ```gleam\n"
+    " import gleam/list\n"
+    "\n"
+    " assert list.fold([1.0, 2.0, 3.0], 0.0, add) == 6.0\n"
+    " ```\n"
+    "\n"
+    " ```gleam\n"
+    " assert 3.0 |> add(2.0) == 5.0\n"
+    " ```\n"
+).
 -spec add(float(), float()) -> float().
--doc(~" Adds two floats together.
-
- It's the function equivalent of the `+.` operator.
- This function is useful in higher order functions or pipes.
-
- ## Examples
-
- ```gleam
- assert add(1.0, 2.0) == 3.0
- ```
-
- ```gleam
- import gleam/list
-
- assert list.fold([1.0, 2.0, 3.0], 0.0, add) == 6.0
- ```
-
- ```gleam
- assert 3.0 |> add(2.0) == 5.0
- ```
-").
 add(A, B) ->
     A + B.
 
--file("src\\gleam\\float.gleam", 532).
+-file("src/gleam/float.gleam", 532).
+?DOC(
+    " Multiplies two floats together.\n"
+    "\n"
+    " It's the function equivalent of the `*.` operator.\n"
+    " This function is useful in higher order functions or pipes.\n"
+    "\n"
+    " ## Examples\n"
+    "\n"
+    " ```gleam\n"
+    " assert multiply(2.0, 4.0) == 8.0\n"
+    " ```\n"
+    "\n"
+    " ```gleam\n"
+    " import gleam/list\n"
+    "\n"
+    " assert list.fold([2.0, 3.0, 4.0], 1.0, multiply) == 24.0\n"
+    " ```\n"
+    "\n"
+    " ```gleam\n"
+    " assert 3.0 |> multiply(2.0) == 6.0\n"
+    " ```\n"
+).
 -spec multiply(float(), float()) -> float().
--doc(~" Multiplies two floats together.
-
- It's the function equivalent of the `*.` operator.
- This function is useful in higher order functions or pipes.
-
- ## Examples
-
- ```gleam
- assert multiply(2.0, 4.0) == 8.0
- ```
-
- ```gleam
- import gleam/list
-
- assert list.fold([2.0, 3.0, 4.0], 1.0, multiply) == 24.0
- ```
-
- ```gleam
- assert 3.0 |> multiply(2.0) == 6.0
- ```
-").
 multiply(A, B) ->
     A * B.
 
--file("src\\gleam\\float.gleam", 561).
+-file("src/gleam/float.gleam", 561).
+?DOC(
+    " Subtracts one float from another.\n"
+    "\n"
+    " It's the function equivalent of the `-.` operator.\n"
+    " This function is useful in higher order functions or pipes.\n"
+    "\n"
+    " ## Examples\n"
+    "\n"
+    " ```gleam\n"
+    " assert subtract(3.0, 1.0) == 2.0\n"
+    " ```\n"
+    "\n"
+    " ```gleam\n"
+    " import gleam/list\n"
+    "\n"
+    " assert list.fold([1.0, 2.0, 3.0], 10.0, subtract) == 4.0\n"
+    " ```\n"
+    "\n"
+    " ```gleam\n"
+    " assert 3.0 |> subtract(_, 2.0) == 1.0\n"
+    " ```\n"
+    "\n"
+    " ```gleam\n"
+    " assert 3.0 |> subtract(2.0, _) == -1.0\n"
+    " ```\n"
+).
 -spec subtract(float(), float()) -> float().
--doc(~" Subtracts one float from another.
-
- It's the function equivalent of the `-.` operator.
- This function is useful in higher order functions or pipes.
-
- ## Examples
-
- ```gleam
- assert subtract(3.0, 1.0) == 2.0
- ```
-
- ```gleam
- import gleam/list
-
- assert list.fold([1.0, 2.0, 3.0], 10.0, subtract) == 4.0
- ```
-
- ```gleam
- assert 3.0 |> subtract(_, 2.0) == 1.0
- ```
-
- ```gleam
- assert 3.0 |> subtract(2.0, _) == -1.0
- ```
-").
 subtract(A, B) ->
     A - B.
 
--file("src\\gleam\\float.gleam", 586).
+-file("src/gleam/float.gleam", 586).
+?DOC(
+    " Returns the natural logarithm (base e) of the given `Float` as a `Result`. If the\n"
+    " input is less than or equal to 0, returns `Error(Nil)`.\n"
+    "\n"
+    " ## Examples\n"
+    "\n"
+    " ```gleam\n"
+    " assert logarithm(1.0) == Ok(0.0)\n"
+    " ```\n"
+    "\n"
+    " ```gleam\n"
+    " assert logarithm(2.718281828459045) == Ok(1.0)\n"
+    " ```\n"
+    "\n"
+    " ```gleam\n"
+    " assert logarithm(0.0) == Error(Nil)\n"
+    " ```\n"
+    "\n"
+    " ```gleam\n"
+    " assert logarithm(-1.0) == Error(Nil)\n"
+    " ```\n"
+).
 -spec logarithm(float()) -> {ok, float()} | {error, nil}.
--doc(~" Returns the natural logarithm (base e) of the given `Float` as a `Result`. If the
- input is less than or equal to 0, returns `Error(Nil)`.
-
- ## Examples
-
- ```gleam
- assert logarithm(1.0) == Ok(0.0)
- ```
-
- ```gleam
- assert logarithm(2.718281828459045) == Ok(1.0)
- ```
-
- ```gleam
- assert logarithm(0.0) == Error(Nil)
- ```
-
- ```gleam
- assert logarithm(-1.0) == Error(Nil)
- ```
-").
 logarithm(X) ->
     case X =< +0.0 of
         true ->
@@ -667,25 +687,25 @@ logarithm(X) ->
             {ok, math:log(X)}
     end.
 
--file("src\\gleam\\float.gleam", 621).
+-file("src/gleam/float.gleam", 621).
+?DOC(
+    " Returns e (Euler's number) raised to the power of the given exponent, as\n"
+    " a `Float`.\n"
+    "\n"
+    " ## Examples\n"
+    "\n"
+    " ```gleam\n"
+    " assert exponential(0.0) == 1.0\n"
+    " ```\n"
+    "\n"
+    " ```gleam\n"
+    " assert exponential(1.0) == 2.718281828459045\n"
+    " ```\n"
+    "\n"
+    " ```gleam\n"
+    " assert exponential(-1.0) == 0.36787944117144233\n"
+    " ```\n"
+).
 -spec exponential(float()) -> float().
--doc(~" Returns e (Euler's number) raised to the power of the given exponent, as
- a `Float`.
-
- ## Examples
-
- ```gleam
- assert exponential(0.0) == 1.0
- ```
-
- ```gleam
- assert exponential(1.0) == 2.718281828459045
- ```
-
- ```gleam
- assert exponential(-1.0) == 0.36787944117144233
- ```
-").
 exponential(X) ->
     math:exp(X).
-

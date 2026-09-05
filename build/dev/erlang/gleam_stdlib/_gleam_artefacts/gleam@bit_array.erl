@@ -1,78 +1,88 @@
 -module(gleam@bit_array).
--compile([no_auto_import, nowarn_ignored, nowarn_unused_vars, nowarn_unused_function, nowarn_nomatch, inline]).
+-compile([no_auto_import, nowarn_unused_vars, nowarn_unused_function, nowarn_nomatch, inline]).
+-define(FILEPATH, "src/gleam/bit_array.gleam").
 -export([from_string/1, bit_size/1, byte_size/1, pad_to_bytes/1, concat/1, append/2, slice/3, is_utf8/1, to_string/1, base64_encode/2, base64_decode/1, base64_url_encode/2, base64_url_decode/1, base16_encode/1, base16_decode/1, inspect/1, compare/2, starts_with/2]).
--moduledoc(~" BitArrays are a sequence of binary data of any length.").
 
--file("src\\gleam\\bit_array.gleam", 11).
+-if(?OTP_RELEASE >= 27).
+-define(MODULEDOC(Str), -moduledoc(Str)).
+-define(DOC(Str), -doc(Str)).
+-else.
+-define(MODULEDOC(Str), -compile([])).
+-define(DOC(Str), -compile([])).
+-endif.
+
+?MODULEDOC(" BitArrays are a sequence of binary data of any length.\n").
+
+-file("src/gleam/bit_array.gleam", 11).
+?DOC(" Converts a UTF-8 `String` type into a `BitArray`.\n").
 -spec from_string(binary()) -> bitstring().
--doc(~" Converts a UTF-8 `String` type into a `BitArray`.
-").
 from_string(X) ->
     gleam_stdlib:identity(X).
 
--file("src\\gleam\\bit_array.gleam", 17).
+-file("src/gleam/bit_array.gleam", 17).
+?DOC(" Returns an integer which is the number of bits in the bit array.\n").
 -spec bit_size(bitstring()) -> integer().
--doc(~" Returns an integer which is the number of bits in the bit array.
-").
 bit_size(X) ->
     erlang:bit_size(X).
 
--file("src\\gleam\\bit_array.gleam", 23).
+-file("src/gleam/bit_array.gleam", 23).
+?DOC(" Returns an integer which is the number of bytes in the bit array.\n").
 -spec byte_size(bitstring()) -> integer().
--doc(~" Returns an integer which is the number of bytes in the bit array.
-").
 byte_size(X) ->
     erlang:byte_size(X).
 
--file("src\\gleam\\bit_array.gleam", 29).
+-file("src/gleam/bit_array.gleam", 29).
+?DOC(" Pads a bit array with zeros so that it is a whole number of bytes.\n").
 -spec pad_to_bytes(bitstring()) -> bitstring().
--doc(~" Pads a bit array with zeros so that it is a whole number of bytes.
-").
 pad_to_bytes(X) ->
     gleam_stdlib:bit_array_pad_to_bytes(X).
 
--file("src\\gleam\\bit_array.gleam", 109).
+-file("src/gleam/bit_array.gleam", 109).
+?DOC(
+    " Creates a new bit array by joining multiple binaries.\n"
+    "\n"
+    " ## Examples\n"
+    "\n"
+    " ```gleam\n"
+    " assert concat([from_string(\"butter\"), from_string(\"fly\")])\n"
+    "   == from_string(\"butterfly\")\n"
+    " ```\n"
+).
 -spec concat(list(bitstring())) -> bitstring().
--doc(~" Creates a new bit array by joining multiple binaries.
-
- ## Examples
-
- ```gleam
- assert concat([from_string(\"butter\"), from_string(\"fly\")])
-   == from_string(\"butterfly\")
- ```
-").
 concat(Bit_arrays) ->
     gleam_stdlib:bit_array_concat(Bit_arrays).
 
--file("src\\gleam\\bit_array.gleam", 40).
+-file("src/gleam/bit_array.gleam", 40).
+?DOC(
+    " Creates a new bit array by joining two bit arrays.\n"
+    "\n"
+    " ## Examples\n"
+    "\n"
+    " ```gleam\n"
+    " assert append(to: from_string(\"butter\"), suffix: from_string(\"fly\"))\n"
+    "   == from_string(\"butterfly\")\n"
+    " ```\n"
+).
 -spec append(bitstring(), bitstring()) -> bitstring().
--doc(~" Creates a new bit array by joining two bit arrays.
-
- ## Examples
-
- ```gleam
- assert append(to: from_string(\"butter\"), suffix: from_string(\"fly\"))
-   == from_string(\"butterfly\")
- ```
-").
 append(First, Second) ->
     gleam_stdlib:bit_array_concat([First, Second]).
 
--file("src\\gleam\\bit_array.gleam", 54).
--spec slice(bitstring(), integer(), integer()) -> {ok, bitstring()} | {error, nil}.
--doc(~" Extracts a sub-section of a bit array.
-
- The slice will start at given position and continue up to specified
- length.
- A negative length can be used to extract bytes at the end of a bit array.
-
- This function runs in constant time.
-").
+-file("src/gleam/bit_array.gleam", 54).
+?DOC(
+    " Extracts a sub-section of a bit array.\n"
+    "\n"
+    " The slice will start at given position and continue up to specified\n"
+    " length.\n"
+    " A negative length can be used to extract bytes at the end of a bit array.\n"
+    "\n"
+    " This function runs in constant time.\n"
+).
+-spec slice(bitstring(), integer(), integer()) -> {ok, bitstring()} |
+    {error, nil}.
 slice(String, Position, Length) ->
     gleam_stdlib:bit_array_slice(String, Position, Length).
 
--file("src\\gleam\\bit_array.gleam", 67).
+-file("src/gleam/bit_array.gleam", 67).
 -spec is_utf8_loop(bitstring()) -> boolean().
 is_utf8_loop(Bits) ->
     case Bits of
@@ -86,19 +96,19 @@ is_utf8_loop(Bits) ->
             false
     end.
 
--file("src\\gleam\\bit_array.gleam", 62).
+-file("src/gleam/bit_array.gleam", 62).
+?DOC(" Tests to see whether a bit array is valid UTF-8.\n").
 -spec is_utf8(bitstring()) -> boolean().
--doc(~" Tests to see whether a bit array is valid UTF-8.
-").
 is_utf8(Bits) ->
     is_utf8_loop(Bits).
 
--file("src\\gleam\\bit_array.gleam", 88).
+-file("src/gleam/bit_array.gleam", 88).
+?DOC(
+    " Converts a bit array to a string.\n"
+    "\n"
+    " Returns an error if the bit array is invalid UTF-8 data.\n"
+).
 -spec to_string(bitstring()) -> {ok, binary()} | {error, nil}.
--doc(~" Converts a bit array to a string.
-
- Returns an error if the bit array is invalid UTF-8 data.
-").
 to_string(Bits) ->
     case is_utf8(Bits) of
         true ->
@@ -108,73 +118,78 @@ to_string(Bits) ->
             {error, nil}
     end.
 
--file("src\\gleam\\bit_array.gleam", 118).
+-file("src/gleam/bit_array.gleam", 118).
+?DOC(
+    " Encodes a BitArray into a base 64 encoded string.\n"
+    "\n"
+    " If the bit array does not contain a whole number of bytes then it is padded\n"
+    " with zero bits prior to being encoded.\n"
+).
 -spec base64_encode(bitstring(), boolean()) -> binary().
--doc(~" Encodes a BitArray into a base 64 encoded string.
-
- If the bit array does not contain a whole number of bytes then it is padded
- with zero bits prior to being encoded.
-").
 base64_encode(Input, Padding) ->
     gleam_stdlib:base64_encode(Input, Padding).
 
--file("src\\gleam\\bit_array.gleam", 122).
+-file("src/gleam/bit_array.gleam", 122).
+?DOC(" Decodes a base 64 encoded string into a `BitArray`.\n").
 -spec base64_decode(binary()) -> {ok, bitstring()} | {error, nil}.
--doc(~" Decodes a base 64 encoded string into a `BitArray`.
-").
 base64_decode(Encoded) ->
     Padded = case erlang:byte_size(gleam_stdlib:identity(Encoded)) rem 4 of
         0 ->
             Encoded;
 
         N ->
-            gleam@string:append(Encoded, gleam@string:repeat(~"=", 4 - N))
+            gleam@string:append(
+                Encoded,
+                gleam@string:repeat(<<"="/utf8>>, 4 - N)
+            )
     end,
     gleam_stdlib:base64_decode(Padded).
 
--file("src\\gleam\\bit_array.gleam", 140).
+-file("src/gleam/bit_array.gleam", 140).
+?DOC(
+    " Encodes a `BitArray` into a base 64 encoded string with URL and filename\n"
+    " safe alphabet.\n"
+    "\n"
+    " If the bit array does not contain a whole number of bytes then it is padded\n"
+    " with zero bits prior to being encoded.\n"
+).
 -spec base64_url_encode(bitstring(), boolean()) -> binary().
--doc(~" Encodes a `BitArray` into a base 64 encoded string with URL and filename
- safe alphabet.
-
- If the bit array does not contain a whole number of bytes then it is padded
- with zero bits prior to being encoded.
-").
 base64_url_encode(Input, Padding) ->
     _pipe = Input,
     _pipe@1 = gleam_stdlib:base64_encode(_pipe, Padding),
-    _pipe@2 = gleam@string:replace(_pipe@1, ~"+", ~"-"),
-    gleam@string:replace(_pipe@2, ~"/", ~"_").
+    _pipe@2 = gleam@string:replace(_pipe@1, <<"+"/utf8>>, <<"-"/utf8>>),
+    gleam@string:replace(_pipe@2, <<"/"/utf8>>, <<"_"/utf8>>).
 
--file("src\\gleam\\bit_array.gleam", 150).
+-file("src/gleam/bit_array.gleam", 150).
+?DOC(
+    " Decodes a base 64 encoded string with URL and filename safe alphabet into a\n"
+    " `BitArray`.\n"
+).
 -spec base64_url_decode(binary()) -> {ok, bitstring()} | {error, nil}.
--doc(~" Decodes a base 64 encoded string with URL and filename safe alphabet into a
- `BitArray`.
-").
 base64_url_decode(Encoded) ->
     _pipe = Encoded,
-    _pipe@1 = gleam@string:replace(_pipe, ~"-", ~"+"),
-    _pipe@2 = gleam@string:replace(_pipe@1, ~"_", ~"/"),
+    _pipe@1 = gleam@string:replace(_pipe, <<"-"/utf8>>, <<"+"/utf8>>),
+    _pipe@2 = gleam@string:replace(_pipe@1, <<"_"/utf8>>, <<"/"/utf8>>),
     base64_decode(_pipe@2).
 
--file("src\\gleam\\bit_array.gleam", 164).
+-file("src/gleam/bit_array.gleam", 164).
+?DOC(
+    " Encodes a `BitArray` into a base 16 encoded string.\n"
+    "\n"
+    " If the bit array does not contain a whole number of bytes then it is padded\n"
+    " with zero bits prior to being encoded.\n"
+).
 -spec base16_encode(bitstring()) -> binary().
--doc(~" Encodes a `BitArray` into a base 16 encoded string.
-
- If the bit array does not contain a whole number of bytes then it is padded
- with zero bits prior to being encoded.
-").
 base16_encode(Input) ->
     gleam_stdlib:base16_encode(Input).
 
--file("src\\gleam\\bit_array.gleam", 170).
+-file("src/gleam/bit_array.gleam", 170).
+?DOC(" Decodes a base 16 encoded string into a `BitArray`.\n").
 -spec base16_decode(binary()) -> {ok, bitstring()} | {error, nil}.
--doc(~" Decodes a base 16 encoded string into a `BitArray`.
-").
 base16_decode(Input) ->
     gleam_stdlib:base16_decode(Input).
 
--file("src\\gleam\\bit_array.gleam", 191).
+-file("src/gleam/bit_array.gleam", 191).
 -spec inspect_loop(bitstring(), binary()) -> binary().
 inspect_loop(Input, Accumulator) ->
     case Input of
@@ -182,82 +197,94 @@ inspect_loop(Input, Accumulator) ->
             Accumulator;
 
         <<X:1>> ->
-            <<<<Accumulator/binary, (erlang:integer_to_binary(X))/binary>>/binary, ":size(1)"/utf8>>;
+            <<<<Accumulator/binary, (erlang:integer_to_binary(X))/binary>>/binary,
+                ":size(1)"/utf8>>;
 
         <<X@1:2>> ->
-            <<<<Accumulator/binary, (erlang:integer_to_binary(X@1))/binary>>/binary, ":size(2)"/utf8>>;
+            <<<<Accumulator/binary, (erlang:integer_to_binary(X@1))/binary>>/binary,
+                ":size(2)"/utf8>>;
 
         <<X@2:3>> ->
-            <<<<Accumulator/binary, (erlang:integer_to_binary(X@2))/binary>>/binary, ":size(3)"/utf8>>;
+            <<<<Accumulator/binary, (erlang:integer_to_binary(X@2))/binary>>/binary,
+                ":size(3)"/utf8>>;
 
         <<X@3:4>> ->
-            <<<<Accumulator/binary, (erlang:integer_to_binary(X@3))/binary>>/binary, ":size(4)"/utf8>>;
+            <<<<Accumulator/binary, (erlang:integer_to_binary(X@3))/binary>>/binary,
+                ":size(4)"/utf8>>;
 
         <<X@4:5>> ->
-            <<<<Accumulator/binary, (erlang:integer_to_binary(X@4))/binary>>/binary, ":size(5)"/utf8>>;
+            <<<<Accumulator/binary, (erlang:integer_to_binary(X@4))/binary>>/binary,
+                ":size(5)"/utf8>>;
 
         <<X@5:6>> ->
-            <<<<Accumulator/binary, (erlang:integer_to_binary(X@5))/binary>>/binary, ":size(6)"/utf8>>;
+            <<<<Accumulator/binary, (erlang:integer_to_binary(X@5))/binary>>/binary,
+                ":size(6)"/utf8>>;
 
         <<X@6:7>> ->
-            <<<<Accumulator/binary, (erlang:integer_to_binary(X@6))/binary>>/binary, ":size(7)"/utf8>>;
+            <<<<Accumulator/binary, (erlang:integer_to_binary(X@6))/binary>>/binary,
+                ":size(7)"/utf8>>;
 
         <<X@7, Rest/bitstring>> ->
             Suffix = case Rest of
                 <<>> ->
-                    ~"";
+                    <<""/utf8>>;
 
                 _ ->
-                    ~", "
+                    <<", "/utf8>>
             end,
-            Accumulator@1 = <<<<Accumulator/binary, (erlang:integer_to_binary(X@7))/binary>>/binary, Suffix/binary>>,
+            Accumulator@1 = <<<<Accumulator/binary,
+                    (erlang:integer_to_binary(X@7))/binary>>/binary,
+                Suffix/binary>>,
             inspect_loop(Rest, Accumulator@1);
 
         _ ->
             Accumulator
     end.
 
--file("src\\gleam\\bit_array.gleam", 187).
+-file("src/gleam/bit_array.gleam", 187).
+?DOC(
+    " Converts a bit array to a string containing the decimal value of each byte.\n"
+    "\n"
+    " Use this over `string.inspect` when you have a bit array you want printed\n"
+    " in the array syntax even if it is valid UTF-8.\n"
+    "\n"
+    " ## Examples\n"
+    "\n"
+    " ```gleam\n"
+    " assert inspect(<<0, 20, 0x20, 255>>) == \"<<0, 20, 32, 255>>\"\n"
+    " ```\n"
+    "\n"
+    " ```gleam\n"
+    " assert inspect(<<100, 5:3>>) == \"<<100, 5:size(3)>>\"\n"
+    " ```\n"
+).
 -spec inspect(bitstring()) -> binary().
--doc(~" Converts a bit array to a string containing the decimal value of each byte.
-
- Use this over `string.inspect` when you have a bit array you want printed
- in the array syntax even if it is valid UTF-8.
-
- ## Examples
-
- ```gleam
- assert inspect(<<0, 20, 0x20, 255>>) == \"<<0, 20, 32, 255>>\"
- ```
-
- ```gleam
- assert inspect(<<100, 5:3>>) == \"<<100, 5:size(3)>>\"
- ```
-").
 inspect(Input) ->
-    <<(inspect_loop(Input, ~"<<"))/binary, ">>"/utf8>>.
+    <<(inspect_loop(Input, <<"<<"/utf8>>))/binary, ">>"/utf8>>.
 
--file("src\\gleam\\bit_array.gleam", 233).
+-file("src/gleam/bit_array.gleam", 233).
+?DOC(
+    " Compare two bit arrays as sequences of bytes.\n"
+    "\n"
+    " ## Examples\n"
+    "\n"
+    " ```gleam\n"
+    " assert compare(<<1>>, <<2>>) == Lt\n"
+    " ```\n"
+    "\n"
+    " ```gleam\n"
+    " assert compare(<<\"AB\":utf8>>, <<\"AA\":utf8>>) == Gt\n"
+    " ```\n"
+    "\n"
+    " ```gleam\n"
+    " assert compare(<<1, 2:size(2)>>, with: <<1, 2:size(2)>>) == Eq\n"
+    " ```\n"
+).
 -spec compare(bitstring(), bitstring()) -> gleam@order:order().
--doc(~" Compare two bit arrays as sequences of bytes.
-
- ## Examples
-
- ```gleam
- assert compare(<<1>>, <<2>>) == Lt
- ```
-
- ```gleam
- assert compare(<<\"AB\":utf8>>, <<\"AA\":utf8>>) == Gt
- ```
-
- ```gleam
- assert compare(<<1, 2:size(2)>>, with: <<1, 2:size(2)>>) == Eq
- ```
-").
 compare(A, B) ->
     case {A, B} of
-        {<<First_byte, First_rest/bitstring>>, <<Second_byte, Second_rest/bitstring>>} ->
+        {<<First_byte, First_rest/bitstring>>,
+            <<Second_byte, Second_rest/bitstring>>} ->
             case {First_byte, Second_byte} of
                 {F, S} when F > S ->
                     gt;
@@ -279,7 +306,8 @@ compare(A, B) ->
             lt;
 
         {First, Second} ->
-            case {gleam_stdlib:bit_array_to_int_and_size(First), gleam_stdlib:bit_array_to_int_and_size(Second)} of
+            case {gleam_stdlib:bit_array_to_int_and_size(First),
+                gleam_stdlib:bit_array_to_int_and_size(Second)} of
                 {{A@1, _}, {B@1, _}} when A@1 > B@1 ->
                     gt;
 
@@ -297,16 +325,17 @@ compare(A, B) ->
             end
     end.
 
--file("src\\gleam\\bit_array.gleam", 273).
+-file("src/gleam/bit_array.gleam", 273).
+?DOC(
+    " Checks whether the first `BitArray` starts with the second one.\n"
+    "\n"
+    " ## Examples\n"
+    "\n"
+    " ```gleam\n"
+    " assert starts_with(<<1, 2, 3, 4>>, <<1, 2>>)\n"
+    " ```\n"
+).
 -spec starts_with(bitstring(), bitstring()) -> boolean().
--doc(~" Checks whether the first `BitArray` starts with the second one.
-
- ## Examples
-
- ```gleam
- assert starts_with(<<1, 2, 3, 4>>, <<1, 2>>)
- ```
-").
 starts_with(Bits, Prefix) ->
     Prefix_size = erlang:bit_size(Prefix),
     case Bits of
@@ -316,4 +345,3 @@ starts_with(Bits, Prefix) ->
         _ ->
             false
     end.
-

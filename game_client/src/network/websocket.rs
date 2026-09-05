@@ -144,7 +144,13 @@ pub fn websocket_receive_system(
                 } else {
                     frontend.current_room = None;
                     frontend.current_room_is_host = false;
-                    frontend.room_code.clear();
+                    // Only wipe the room-code input when the user is NOT actively
+                    // typing it on the Enter Room panel – otherwise every LobbyState
+                    // broadcast (triggered by the room list changing) clears their
+                    // in-progress input.
+                    if frontend.lobby_panel != LobbyPanel::EnterRoom {
+                        frontend.room_code.clear();
+                    }
                     if frontend.screen == Screen::Game {
                         frontend.screen = Screen::Lobby;
                         frontend.lobby_panel = LobbyPanel::Choice;

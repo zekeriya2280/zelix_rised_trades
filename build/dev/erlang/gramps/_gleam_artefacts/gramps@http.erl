@@ -1,18 +1,36 @@
 -module(gramps@http).
--compile([no_auto_import, nowarn_ignored, nowarn_unused_vars, nowarn_unused_function, nowarn_nomatch, inline]).
--export([read_response/1, read_request/1, encode_headers/1, status_to_bit_array/1, response_builder/2, to_bytes_tree/1]).
+-compile([no_auto_import, nowarn_unused_vars, nowarn_unused_function, nowarn_nomatch, inline]).
+-define(FILEPATH, "src/gramps/http.gleam").
+-export([read_response/1, read_request/1, status_to_bit_array/1, encode_headers/1, response_builder/2, to_bytes_tree/1]).
 -export_type([packet_type/0, decode_packet_error/0, uri_packet/0, decoded_packet/0]).
+
+-if(?OTP_RELEASE >= 27).
+-define(MODULEDOC(Str), -moduledoc(Str)).
+-define(DOC(Str), -doc(Str)).
+-else.
+-define(MODULEDOC(Str), -compile([])).
+-define(DOC(Str), -compile([])).
+-endif.
 
 -type packet_type() :: httph_bin | http_bin.
 
 -type decode_packet_error() :: {more, integer()} | {http_error, binary()}.
 
--type uri_packet() :: {abs_path, binary()} | {absolute_uri, gleam@http:scheme(), binary(), integer(), binary()}.
+-type uri_packet() :: {abs_path, binary()} |
+    {absolute_uri, gleam@http:scheme(), binary(), integer(), binary()}.
 
--type decoded_packet() :: {http_request, binary(), uri_packet(), {integer(), integer()}} | {http_response, {integer(), integer()}, integer(), binary()} | {http_header, integer(), gleam@dynamic:dynamic_(), binary(), binary()} | http_eoh.
+-type decoded_packet() :: {http_request,
+        binary(),
+        uri_packet(),
+        {integer(), integer()}} |
+    {http_response, {integer(), integer()}, integer(), binary()} |
+    {http_header, integer(), gleam@dynamic:dynamic_(), binary(), binary()} |
+    http_eoh.
 
--file("src\\gramps\\http.gleam", 41).
--spec get_headers(bitstring(), list({binary(), binary()})) -> {ok, {list({binary(), binary()}), bitstring()}} | {error, decode_packet_error()}.
+-file("src/gramps/http.gleam", 41).
+-spec get_headers(bitstring(), list({binary(), binary()})) -> {ok,
+        {list({binary(), binary()}), bitstring()}} |
+    {error, decode_packet_error()}.
 get_headers(Data, Headers) ->
     case gramps_ffi:decode_packet(httph_bin, Data, []) of
         {ok, {http_eoh, Rest}} ->
@@ -22,14 +40,19 @@ get_headers(Data, Headers) ->
             get_headers(Rest@1, [{string:lowercase(Field), Value} | Headers]);
 
         {ok, Val} ->
-            {error, {http_error, <<"Expected only headers but got request/response: "/utf8, (gleam@string:inspect(Val))/binary>>}};
+            {error,
+                {http_error,
+                    <<"Expected only headers but got request/response: "/utf8,
+                        (gleam@string:inspect(Val))/binary>>}};
 
         {error, Reason} ->
             {error, Reason}
     end.
 
--file("src\\gramps\\http.gleam", 59).
--spec read_response(bitstring()) -> {ok, {gleam@http@response:response(nil), bitstring()}} | {error, decode_packet_error()}.
+-file("src/gramps/http.gleam", 59).
+-spec read_response(bitstring()) -> {ok,
+        {gleam@http@response:response(nil), bitstring()}} |
+    {error, decode_packet_error()}.
 read_response(Data) ->
     case gramps_ffi:decode_packet(http_bin, Data, []) of
         {ok, {{http_response, _, Status, _}, Rest}} ->
@@ -45,11 +68,13 @@ read_response(Data) ->
             {error, Reason@1};
 
         _ ->
-            {error, {http_error, ~"Unexpected data"}}
+            {error, {http_error, <<"Unexpected data"/utf8>>}}
     end.
 
--file("src\\gramps\\http.gleam", 76).
--spec read_request(bitstring()) -> {ok, {gleam@http@request:request(nil), bitstring()}} | {error, decode_packet_error()}.
+-file("src/gramps/http.gleam", 76).
+-spec read_request(bitstring()) -> {ok,
+        {gleam@http@request:request(nil), bitstring()}} |
+    {error, decode_packet_error()}.
 read_request(Data) ->
     case gramps_ffi:decode_packet(http_bin, Data, []) of
         {ok, {{http_request, Method, Uri, _}, Rest}} ->
@@ -57,26 +82,40 @@ read_request(Data) ->
                 {ok, {Headers, Rest@1}} ->
                     Host = begin
                         _pipe = Headers,
-                        _pipe@1 = gleam@list:key_find(_pipe, ~"host"),
-                        gleam@result:unwrap(_pipe@1, ~"")
+                        _pipe@1 = gleam@list:key_find(_pipe, <<"host"/utf8>>),
+                        gleam@result:unwrap(_pipe@1, <<""/utf8>>)
                     end,
-                    {Scheme, Host@1, Port, Path} = case Uri of
-                        {absolute_uri, Scheme@1, Host@2, Port@1, Path@1} ->
-                            {Scheme@1, Host@2, {some, Port@1}, Path@1};
+                    {Scheme@1, Host@2, Port@1, Path@2} = case Uri of
+                        {absolute_uri, Scheme, Host@1, Port, Path} ->
+                            {Scheme, Host@1, {some, Port}, Path};
 
-                        {abs_path, Path@2} ->
-                            {http, Host, none, Path@2}
+                        {abs_path, Path@1} ->
+                            {http, Host, none, Path@1}
                     end,
                     {Path@3, Query} = begin
-                        _pipe@2 = Path,
-                        _pipe@3 = gleam@string:split_once(_pipe@2, ~"?"),
-                        _pipe@4 = gleam@result:map(_pipe@3, fun(Pair) ->
-                            {erlang:element(1, Pair), {some, erlang:element(2, Pair)}}
-                        end),
-                        gleam@result:unwrap(_pipe@4, {Path, none})
+                        _pipe@2 = Path@2,
+                        _pipe@3 = gleam@string:split_once(_pipe@2, <<"?"/utf8>>),
+                        _pipe@4 = gleam@result:map(
+                            _pipe@3,
+                            fun(Pair) ->
+                                {erlang:element(1, Pair),
+                                    {some, erlang:element(2, Pair)}}
+                            end
+                        ),
+                        gleam@result:unwrap(_pipe@4, {Path@2, none})
                     end,
                     Method@1 = gleam@http:parse_method(Method),
-                    {ok, {{request, gleam@result:unwrap(Method@1, get), Headers, nil, Scheme, Host@1, Port, Path@3, Query}, Rest@1}};
+                    {ok,
+                        {{request,
+                                gleam@result:unwrap(Method@1, get),
+                                Headers,
+                                nil,
+                                Scheme@1,
+                                Host@2,
+                                Port@1,
+                                Path@3,
+                                Query},
+                            Rest@1}};
 
                 {error, Reason} ->
                     {error, Reason}
@@ -86,22 +125,13 @@ read_request(Data) ->
             {error, Reason@1};
 
         Err ->
-            {error, {http_error, <<"Unexpected data: "/utf8, (gleam@string:inspect(Err))/binary>>}}
+            {error,
+                {http_error,
+                    <<"Unexpected data: "/utf8,
+                        (gleam@string:inspect(Err))/binary>>}}
     end.
 
--file("src\\gramps\\http.gleam", 209).
--spec encode_headers(list({binary(), binary()})) -> gleam@bytes_tree:bytes_tree().
-encode_headers(Headers) ->
-    gleam@list:fold(Headers, gleam@bytes_tree:new(), fun(Builder, Tup) ->
-        {Header, Value} = Tup,
-        _pipe = Builder,
-        _pipe@1 = gleam@bytes_tree:append_string(_pipe, Header),
-        _pipe@2 = gleam@bytes_tree:append(_pipe@1, <<": "/utf8>>),
-        _pipe@3 = gleam@bytes_tree:append_string(_pipe@2, Value),
-        gleam@bytes_tree:append(_pipe@3, <<"\r\n"/utf8>>)
-    end).
-
--file("src\\gramps\\http.gleam", 148).
+-file("src/gramps/http.gleam", 148).
 -spec status_to_bit_array(integer()) -> bitstring().
 status_to_bit_array(Status) ->
     case Status of
@@ -271,7 +301,23 @@ status_to_bit_array(Status) ->
             <<"Unknown HTTP Status"/utf8>>
     end.
 
--file("src\\gramps\\http.gleam", 132).
+-file("src/gramps/http.gleam", 209).
+-spec encode_headers(list({binary(), binary()})) -> gleam@bytes_tree:bytes_tree().
+encode_headers(Headers) ->
+    gleam@list:fold(
+        Headers,
+        gleam@bytes_tree:new(),
+        fun(Builder, Tup) ->
+            {Header, Value} = Tup,
+            _pipe = Builder,
+            _pipe@1 = gleam@bytes_tree:append_string(_pipe, Header),
+            _pipe@2 = gleam@bytes_tree:append(_pipe@1, <<": "/utf8>>),
+            _pipe@3 = gleam@bytes_tree:append_string(_pipe@2, Value),
+            gleam@bytes_tree:append(_pipe@3, <<"\r\n"/utf8>>)
+        end
+    ).
+
+-file("src/gramps/http.gleam", 132).
 -spec response_builder(integer(), list({binary(), binary()})) -> gleam@bytes_tree:bytes_tree().
 response_builder(Status, Headers) ->
     Status_string = begin
@@ -288,11 +334,10 @@ response_builder(Status, Headers) ->
     _pipe@8 = gleam_stdlib:iodata_append(_pipe@7, encode_headers(Headers)),
     gleam@bytes_tree:append(_pipe@8, <<"\r\n"/utf8>>).
 
--file("src\\gramps\\http.gleam", 126).
+-file("src/gramps/http.gleam", 126).
+?DOC(" Turns an HTTP response into a TCP message\n").
 -spec to_bytes_tree(gleam@http@response:response(gleam@bytes_tree:bytes_tree())) -> gleam@bytes_tree:bytes_tree().
--doc(~" Turns an HTTP response into a TCP message").
 to_bytes_tree(Resp) ->
     _pipe = erlang:element(2, Resp),
     _pipe@1 = response_builder(_pipe, erlang:element(3, Resp)),
     gleam_stdlib:iodata_append(_pipe@1, erlang:element(4, Resp)).
-

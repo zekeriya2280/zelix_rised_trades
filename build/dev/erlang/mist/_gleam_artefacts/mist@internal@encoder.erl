@@ -1,24 +1,21 @@
 -module(mist@internal@encoder).
--compile([no_auto_import, nowarn_ignored, nowarn_unused_vars, nowarn_unused_function, nowarn_nomatch, inline]).
--export([encode_headers/1, status_to_bit_array/1, response_builder/3, to_bytes_tree/2]).
--moduledoc(false).
+-compile([no_auto_import, nowarn_unused_vars, nowarn_unused_function, nowarn_nomatch, inline]).
+-define(FILEPATH, "src/mist/internal/encoder.gleam").
+-export([status_to_bit_array/1, encode_headers/1, response_builder/3, to_bytes_tree/2]).
 
--file("src\\mist\\internal\\encoder.gleam", 95).
--spec encode_headers(list({binary(), binary()})) -> gleam@bytes_tree:bytes_tree().
--doc(false).
-encode_headers(Headers) ->
-    gleam@list:fold(Headers, gleam@bytes_tree:new(), fun(Builder, Tup) ->
-        {Header, Value} = Tup,
-        _pipe = Builder,
-        _pipe@1 = gleam@bytes_tree:append_string(_pipe, Header),
-        _pipe@2 = gleam@bytes_tree:append(_pipe@1, <<": "/utf8>>),
-        _pipe@3 = gleam@bytes_tree:append_string(_pipe@2, Value),
-        gleam@bytes_tree:append(_pipe@3, <<"\r\n"/utf8>>)
-    end).
+-if(?OTP_RELEASE >= 27).
+-define(MODULEDOC(Str), -moduledoc(Str)).
+-define(DOC(Str), -doc(Str)).
+-else.
+-define(MODULEDOC(Str), -compile([])).
+-define(DOC(Str), -compile([])).
+-endif.
 
--file("src\\mist\\internal\\encoder.gleam", 34).
+?MODULEDOC(false).
+
+-file("src/mist/internal/encoder.gleam", 34).
+?DOC(false).
 -spec status_to_bit_array(integer()) -> bitstring().
--doc(false).
 status_to_bit_array(Status) ->
     case Status of
         100 ->
@@ -187,9 +184,26 @@ status_to_bit_array(Status) ->
             <<"Unknown HTTP Status"/utf8>>
     end.
 
--file("src\\mist\\internal\\encoder.gleam", 14).
+-file("src/mist/internal/encoder.gleam", 95).
+?DOC(false).
+-spec encode_headers(list({binary(), binary()})) -> gleam@bytes_tree:bytes_tree().
+encode_headers(Headers) ->
+    gleam@list:fold(
+        Headers,
+        gleam@bytes_tree:new(),
+        fun(Builder, Tup) ->
+            {Header, Value} = Tup,
+            _pipe = Builder,
+            _pipe@1 = gleam@bytes_tree:append_string(_pipe, Header),
+            _pipe@2 = gleam@bytes_tree:append(_pipe@1, <<": "/utf8>>),
+            _pipe@3 = gleam@bytes_tree:append_string(_pipe@2, Value),
+            gleam@bytes_tree:append(_pipe@3, <<"\r\n"/utf8>>)
+        end
+    ).
+
+-file("src/mist/internal/encoder.gleam", 14).
+?DOC(false).
 -spec response_builder(integer(), list({binary(), binary()}), binary()) -> gleam@bytes_tree:bytes_tree().
--doc(false).
 response_builder(Status, Headers, Version) ->
     Status_string = begin
         _pipe = Status,
@@ -199,17 +213,22 @@ response_builder(Status, Headers, Version) ->
         gleam@bytes_tree:append(_pipe@3, status_to_bit_array(Status))
     end,
     _pipe@4 = gleam@bytes_tree:new(),
-    _pipe@5 = gleam@bytes_tree:append(_pipe@4, <<"HTTP/"/utf8, Version/binary, " "/utf8>>),
+    _pipe@5 = gleam@bytes_tree:append(
+        _pipe@4,
+        <<"HTTP/"/utf8, Version/binary, " "/utf8>>
+    ),
     _pipe@6 = gleam_stdlib:iodata_append(_pipe@5, Status_string),
     _pipe@7 = gleam@bytes_tree:append(_pipe@6, <<"\r\n"/utf8>>),
     _pipe@8 = gleam_stdlib:iodata_append(_pipe@7, encode_headers(Headers)),
     gleam@bytes_tree:append(_pipe@8, <<"\r\n"/utf8>>).
 
--file("src\\mist\\internal\\encoder.gleam", 8).
--spec to_bytes_tree(gleam@http@response:response(gleam@bytes_tree:bytes_tree()), binary()) -> gleam@bytes_tree:bytes_tree().
--doc(false).
+-file("src/mist/internal/encoder.gleam", 8).
+?DOC(false).
+-spec to_bytes_tree(
+    gleam@http@response:response(gleam@bytes_tree:bytes_tree()),
+    binary()
+) -> gleam@bytes_tree:bytes_tree().
 to_bytes_tree(Resp, Version) ->
     _pipe = erlang:element(2, Resp),
     _pipe@1 = response_builder(_pipe, erlang:element(3, Resp), Version),
     gleam_stdlib:iodata_append(_pipe@1, erlang:element(4, Resp)).
-
