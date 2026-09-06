@@ -708,8 +708,10 @@ fn snap_position(x: Float, y: Float) -> Position {
 }
 
 fn validate_coordinate(value: Float) -> Bool {
+  // World coordinates must map to an actual grid cell. The upper edge is
+  // exclusive because x == +1000 maps to cell 100, outside a 0..99 grid.
   value >. 0.0 -. world_limit
-    && value <=. world_limit
+    && value <. world_limit
 }
 
 fn too_close(world: World, player_id: Int, x: Float, y: Float) -> Bool {

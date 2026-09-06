@@ -40,3 +40,8 @@ CLIENT
 ## Verification note
 
 The archive was inspected and patched statically. This runtime does not provide the Cargo/Gleam compiler binaries, so a final `cargo test` / `gleam test` execution could not be performed inside this session. The source/protocol consistency was checked by static inspection.
+
+
+## Follow-up repair (2026-09-06)
+
+The online client now renders the server-provided vehicle `path` and `path_index` directly. It no longer runs a second client-side A* route for online deliveries. Online road segments are world entities tagged with `OnlineDeliveryRoad`; they are never attached as children of the vehicle, and their rotation/position are preserved. Vehicle sprites rotate toward their immediate next waypoint. Online building sprites use the same `BUILDING_SIZE` as the offline path. WebAssembly networking no longer waits indefinitely on `read.next()` before checking outgoing messages.

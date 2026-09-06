@@ -18,6 +18,13 @@ use crate::network::protocol::ClientMessage;
 #[derive(Component)]
 pub struct DeliveryRoadSegment;
 
+/// Identifies a road segment drawn from an authoritative online vehicle path.
+/// These entities deliberately are not children of the vehicle.
+#[derive(Component, Clone, Copy, Debug, PartialEq, Eq)]
+pub struct OnlineDeliveryRoad {
+    pub vehicle_id: u64,
+}
+
 /// Which stage of the "send material" flow we are in.
 #[derive(Default)]
 pub enum SelectionPhase {

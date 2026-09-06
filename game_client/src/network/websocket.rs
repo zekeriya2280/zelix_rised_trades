@@ -35,23 +35,10 @@ use crate::core::{
     Warehouse,
 };
 
-use crate::render::map::TerrainGrid;
-use crate::render::path::route_between;
-use crate::render::logistics::{collect_cells, spawn_segment};
+use crate::render::logistics::{spawn_segment, OnlineDeliveryRoad};
 use crate::render::vehicle_render::VehicleSprite;
 
-/*
-    Online world render Z layers.
-
-    These are intentionally kept local to websocket.rs so this file does not
-    depend on a missing re-export from render/mod.rs.
-
-    Layer order:
-        terrain/grid < road < vehicle < building < UI
-*/
-const ROAD_Z: f32 = 0.0;
-const VEHICLE_Z: f32 = 5.0;
-const BUILDING_Z: f32 = 20.0;
+use crate::render::map::{BUILDING_SIZE, BUILDING_Z, VEHICLE_Z};
 
 #[derive(Resource, Default)]
 pub struct NetworkClient {
@@ -305,25 +292,33 @@ pub fn websocket_connect_system(
                 }
             }
 
-            match read.next().await {
-                Some(Ok(gloo_net::websocket::Message::Text(text))) => {
-                    if let Ok(message) =
-                        serde_json::from_str::<ServerMessage>(&text)
-                    {
-                        let _ = tx_in.send(message);
+            // Do not block outgoing messages behind read.next().await. A
+            // short async wake-up gives WebAssembly a responsive bidirectional
+            // WebSocket loop without a busy-spin.
+            use futures_util::future::{select, Either};
+            use futures_util::FutureExt;
+            let incoming = Box::pin(read.next().fuse());
+            let wake = Box::pin(gloo_timers::future::TimeoutFuture::new(10).fuse());
+
+            match select(incoming, wake).await {
+                Either::Left((message, _)) => match message {
+                    Some(Ok(gloo_net::websocket::Message::Text(text))) => {
+                        if let Ok(message) =
+                            serde_json::from_str::<ServerMessage>(&text)
+                        {
+                            let _ = tx_in.send(message);
+                        }
                     }
-                }
-
-                Some(Ok(_)) => {}
-
-                Some(Err(error)) => {
-                    let _ = tx_in.send(ServerMessage::Error {
-                        message: error.to_string(),
-                    });
-                    break;
-                }
-
-                None => break,
+                    Some(Ok(_)) => {}
+                    Some(Err(error)) => {
+                        let _ = tx_in.send(ServerMessage::Error {
+                            message: error.to_string(),
+                        });
+                        break;
+                    }
+                    None => break,
+                },
+                Either::Right((_, _)) => {}
             }
         }
 
@@ -649,20 +644,7 @@ pub fn apply_snapshot_system(
         (Entity, &ServerId, &OwnerId),
         With<ServerOwned>,
     >,
-    terrain: Res<TerrainGrid>,
-    server_buildings: Query<
-        &GlobalTransform,
-        (
-            With<ServerOwned>,
-            Or<(
-                With<Bank>,
-                With<Factory>,
-                With<Warehouse>,
-                With<Gatherer>,
-                With<Farm>,
-            )>,
-        ),
-    >,
+    online_roads: Query<(Entity, &OnlineDeliveryRoad)>,
 ) {
     let Some(snapshot) = pending.0.take() else {
         return;
@@ -701,7 +683,7 @@ pub fn apply_snapshot_system(
                         CityRadius { radius: 300.0 },
                         Sprite {
                             image: asset_server.load("bank.png"),
-                            custom_size: Some(Vec2::splat(48.0)),
+                            custom_size: Some(Vec2::splat(BUILDING_SIZE)),
                             ..default()
                         },
                         Transform::from_xyz(
@@ -744,7 +726,7 @@ pub fn apply_snapshot_system(
                         },
                         Sprite {
                             image: asset_server.load("factory.png"),
-                            custom_size: Some(Vec2::splat(48.0)),
+                            custom_size: Some(Vec2::splat(BUILDING_SIZE)),
                             ..default()
                         },
                         Transform::from_xyz(
@@ -788,7 +770,7 @@ pub fn apply_snapshot_system(
                         Warehouse,
                         Sprite {
                             image: asset_server.load("warehouse.png"),
-                            custom_size: Some(Vec2::splat(48.0)),
+                            custom_size: Some(Vec2::splat(BUILDING_SIZE)),
                             ..default()
                         },
                         Transform::from_xyz(
@@ -827,7 +809,7 @@ pub fn apply_snapshot_system(
                         Gatherer,
                         Sprite {
                             image: asset_server.load("gatherer.png"),
-                            custom_size: Some(Vec2::splat(48.0)),
+                            custom_size: Some(Vec2::splat(BUILDING_SIZE)),
                             ..default()
                         },
                         Transform::from_xyz(
@@ -866,7 +848,7 @@ pub fn apply_snapshot_system(
                         Farm,
                         Sprite {
                             image: asset_server.load("farm.png"),
-                            custom_size: Some(Vec2::splat(48.0)),
+                            custom_size: Some(Vec2::splat(BUILDING_SIZE)),
                             ..default()
                         },
                         Transform::from_xyz(
@@ -890,10 +872,28 @@ pub fn apply_snapshot_system(
         }
     }
 
-    for vehicle in snapshot.vehicles {
-        seen.insert(vehicle.id);
+    let existing_roads: std::collections::HashSet<u64> = online_roads
+        .iter()
+        .map(|(_, road)| road.vehicle_id)
+        .collect();
 
+    for vehicle in snapshot.vehicles {
+        if !vehicle.is_finite() {
+            if let Some(entity) = existing.get(&vehicle.id) {
+                commands.entity(*entity).despawn();
+            }
+            continue;
+        }
+
+        seen.insert(vehicle.id);
         let is_new = !existing.contains_key(&vehicle.id);
+
+        let waypoints: Vec<Vec2> = vehicle
+            .path
+            .iter()
+            .map(|point| Vec2::new(point.x, point.y))
+            .collect();
+        let path_index = vehicle.path_index as usize;
 
         let entity = existing
             .get(&vehicle.id)
@@ -904,9 +904,7 @@ pub fn apply_snapshot_system(
                         ServerOwned,
                         ServerId(vehicle.id),
                         OwnerId(vehicle.owner_id),
-                        Vehicle {
-                            speed: vehicle.speed,
-                        },
+                        Vehicle { speed: vehicle.speed },
                         VehicleSprite,
                         Sprite {
                             image: asset_server.load("vehicle.png"),
@@ -919,24 +917,17 @@ pub fn apply_snapshot_system(
                             VEHICLE_Z,
                         ),
                         PathFollower {
-                            waypoints: vec![
-                                Vec2::new(
-                                    vehicle.target_x,
-                                    vehicle.target_y,
-                                ),
-                            ],
-                            index: 0,
+                            waypoints: waypoints.clone(),
+                            index: path_index,
                         },
                     ))
                     .id()
             });
 
-        if existing.contains_key(&vehicle.id) {
+        if !is_new {
             commands.entity(entity).insert((
                 OwnerId(vehicle.owner_id),
-                Vehicle {
-                    speed: vehicle.speed,
-                },
+                Vehicle { speed: vehicle.speed },
                 VehicleSprite,
                 Transform::from_xyz(
                     vehicle.x,
@@ -944,82 +935,33 @@ pub fn apply_snapshot_system(
                     VEHICLE_Z,
                 ),
                 PathFollower {
-                    waypoints: vec![
-                        Vec2::new(
-                            vehicle.target_x,
-                            vehicle.target_y,
-                        ),
-                    ],
-                    index: 0,
+                    waypoints: waypoints.clone(),
+                    index: path_index,
                 },
             ));
         }
 
-        /*
-            Draw the delivery road only when the vehicle is first introduced.
-
-            At the moment route_between() is still used for the visual road.
-            The authoritative server nevertheless remains responsible for the
-            actual vehicle position.
-        */
-        if is_new {
-            let mut blocked =
-                std::collections::HashSet::new();
-
-            for transform in &server_buildings {
-                collect_cells(
-                    &terrain,
-                    transform.translation().truncate(),
-                    &mut blocked,
-                );
-            }
-
-            let is_blocked =
-                |x: usize, y: usize| blocked.contains(&(x, y));
-
-            if let Some(waypoints) = route_between(
-                &terrain,
-                &is_blocked,
-                Vec2::new(vehicle.x, vehicle.y),
-                Vec2::new(
-                    vehicle.target_x,
-                    vehicle.target_y,
-                ),
-            ) {
-                let segments: Vec<Entity> = waypoints
-                    .windows(2)
-                    .map(|pair| {
-                        let entity = spawn_segment(
-                            &mut commands,
-                            pair[0],
-                            pair[1],
-                        );
-
-                        /*
-                            Force the road segment into the dedicated
-                            online road layer even if spawn_segment's
-                            internal default changes later.
-                        */
-                        commands.entity(entity).insert(
-                            Transform {
-                                translation: Vec3::new(
-                                    pair[0].x + (pair[1].x - pair[0].x) * 0.5,
-                                    pair[0].y + (pair[1].y - pair[0].y) * 0.5,
-                                    ROAD_Z,
-                                ),
-                                ..default()
-                            },
-                        );
-
-                        entity
-                    })
-                    .collect();
-
-                if !segments.is_empty() {
-                    commands
-                        .entity(entity)
-                        .add_children(&segments);
+        // The server is authoritative for the exact road. Never recalculate
+        // the route locally: the client and server can otherwise choose
+        // different equal-cost grid paths. Roads are independent world
+        // entities and must never become vehicle children.
+        if !waypoints.is_empty()
+            && (is_new || !existing_roads.contains(&vehicle.id))
+        {
+            for pair in waypoints.windows(2) {
+                if pair[0].distance_squared(pair[1]) <= 0.0001 {
+                    continue;
                 }
+                let segment = spawn_segment(
+                    &mut commands,
+                    pair[0],
+                    pair[1],
+                );
+                commands
+                    .entity(segment)
+                    .insert(OnlineDeliveryRoad {
+                        vehicle_id: vehicle.id,
+                    });
             }
         }
     }
@@ -1032,6 +974,14 @@ pub fn apply_snapshot_system(
     for (entity, id, _owner) in server_entities.iter() {
         if !seen.contains(&id.0) {
             commands.entity(entity).despawn();
+        }
+    }
+
+    // Roads have no ServerId of their own. Remove all road segments whose
+    // vehicle disappeared from the authoritative snapshot.
+    for (road_entity, road) in online_roads.iter() {
+        if !seen.contains(&road.vehicle_id) {
+            commands.entity(road_entity).despawn();
         }
     }
 }
