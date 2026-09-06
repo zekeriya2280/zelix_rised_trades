@@ -9,6 +9,7 @@ use crate::frontend::{AuthStore, FrontendState, Screen, UserAccount};
 pub enum AuthRequest {
     Register { email: String, password: String, nickname: String },
     Login { email: String, password: String },
+    Guest { nickname: String },
 }
 
 #[derive(Clone, Debug)]
@@ -100,12 +101,30 @@ pub fn request_register(client: &AuthClient, email: &str, password: &str, nickna
     }
 }
 
+pub fn request_guest(client: &AuthClient, nickname: &str) {
+    #[cfg(not(target_arch = "wasm32"))]
+    {
+        let _ = client.requests.send(AuthRequest::Guest { nickname: nickname.trim().to_string() });
+    }
+    #[cfg(target_arch = "wasm32")]
+    {
+        let sender = client.response_tx.clone();
+        let server = server_base();
+        let nickname = nickname.trim().to_string();
+        wasm_bindgen_futures::spawn_local(async move {
+            let response = web_post_form(&server, "guest", "", "", Some(&nickname)).await;
+            let _ = sender.send(response);
+        });
+    }
+}
+
 #[cfg(not(target_arch = "wasm32"))]
 pub fn auth_worker(requests: Receiver<AuthRequest>, responses: Sender<AuthResponse>, server: String) {
     while let Ok(request) = requests.recv() {
         let response = match request {
             AuthRequest::Login { email, password } => post_form(&server, "login", &email, &password, None),
             AuthRequest::Register { email, password, nickname } => post_form(&server, "register", &email, &password, Some(&nickname)),
+            AuthRequest::Guest { nickname } => post_form(&server, "guest", "", "", Some(&nickname)),
         };
         let _ = responses.send(response);
     }
@@ -119,10 +138,16 @@ pub fn poll_auth_responses_system(
 ) {
     while let Ok(response) = client.responses.try_recv() {
         if response.ok {
-            let email = match state.screen {
-                Screen::Login => state.login_email.trim().to_string(),
-                Screen::Register => state.register_email.trim().to_string(),
-                _ => String::new(),
+            let is_guest = state.pending_guest;
+            state.pending_guest = false;
+            let email = if is_guest {
+                String::from("guest@anonymous")
+            } else {
+                match state.screen {
+                    Screen::Login => state.login_email.trim().to_string(),
+                    Screen::Register => state.register_email.trim().to_string(),
+                    _ => String::new(),
+                }
             };
             auth.current_user = Some(UserAccount { email, nickname: response.nickname, token: response.token });
             state.login_password.clear();

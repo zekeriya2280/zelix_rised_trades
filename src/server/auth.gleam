@@ -77,21 +77,93 @@ pub fn handle(path: String, body: BitArray) -> AuthResult {
   case bit_array.to_string(body) {
     Error(_) -> failed("Request body is not valid UTF-8.")
     Ok(text) -> {
-      case decode_credentials(text) {
-        Error(message) -> failed(message)
-        Ok(credentials) -> case path {
-          "login" -> login(credentials.email, credentials.password)
-          "register" -> {
-            let nickname = credentials.nickname |> option.unwrap("") |> string.trim
-            case valid_register_input(credentials.email, credentials.password, nickname) {
-              Ok(Nil) -> register(credentials.email, credentials.password, nickname)
-              Error(message) -> failed(message)
+      case path {
+        "guest" -> {
+          case decode_guest_nickname(text) {
+            Error(message) -> failed(message)
+            Ok(nickname) -> guest(string.trim(nickname))
+          }
+        }
+        _ -> {
+          case decode_credentials(text) {
+            Error(message) -> failed(message)
+            Ok(credentials) -> case path {
+              "login" -> login(credentials.email, credentials.password)
+              "register" -> {
+                let nickname = credentials.nickname |> option.unwrap("") |> string.trim
+                case valid_register_input(credentials.email, credentials.password, nickname) {
+                  Ok(Nil) -> register(credentials.email, credentials.password, nickname)
+                  Error(message) -> failed(message)
+                }
+              }
+              _ -> failed("Unknown auth action.")
             }
           }
-          _ -> failed("Unknown auth action.")
         }
       }
     }
+  }
+}
+
+/// Anonymous developer login: creates a Firebase anonymous account (no email /
+/// password) and stores the given nickname as its display name so the regular
+/// websocket join flow (token verification) works unchanged.
+fn guest(nickname: String) -> AuthResult {
+  case string.length(nickname) >= 3 && string.length(nickname) <= 24 {
+    False -> failed("Nickname must be 3-24 characters.")
+    True ->
+      case firebase_config.firebase_config() {
+        Error(message) -> failed(message)
+        Ok(config) -> {
+          let body = json.object([#("returnSecureToken", json.bool(True))]) |> json.to_string
+          case firebase_post(config.api_key, "/accounts:signUp", body) {
+            Ok(text) -> {
+              let token = extract(text, "idToken")
+              let local_id = extract(text, "localId")
+              case token == "" {
+                True ->
+                  failed(
+                    "Firebase did not return an ID token. Is the Anonymous provider enabled in the Firebase console?",
+                  )
+                False -> {
+                  let update =
+                    json.object([
+                      #("idToken", json.string(token)),
+                      #("displayName", json.string(nickname)),
+                      #("returnSecureToken", json.bool(True)),
+                    ])
+                    |> json.to_string
+                  case firebase_post(config.api_key, "/accounts:update", update) {
+                    Ok(updated) -> {
+                      let final_token = extract_optional(updated, "idToken") |> option.unwrap(token)
+                      let final_nickname =
+                        extract_optional(updated, "displayName")
+                        |> option.unwrap(nickname)
+                        |> string.trim
+                      case string.length(final_nickname) >= 3 && string.length(final_nickname) <= 24 {
+                        True -> {
+                          firestore.save_player(final_token, local_id, final_nickname)
+                          AuthResult(
+                            True,
+                            "Guest session started. Welcome, " <> final_nickname <> ".",
+                            final_nickname,
+                            final_token,
+                          )
+                        }
+                        False ->
+                          failed("Firebase created the guest account but did not store a valid nickname.")
+                      }
+                    }
+                    Error(message) ->
+                      failed("Guest account created, but nickname setup failed: " <> message)
+                  }
+                }
+              }
+            }
+            Error(message) -> failed(message)
+          }
+        }
+      }
   }
 }
 
@@ -277,6 +349,17 @@ fn decode_credentials(text: String) -> Result(Credentials, String) {
   case json.parse(text, using: decoder) {
     Ok(credentials) -> Ok(credentials)
     Error(_) -> Error("Invalid auth request.")
+  }
+}
+
+fn decode_guest_nickname(text: String) -> Result(String, String) {
+  let decoder = {
+    use nickname <- decode.field("nickname", decode.string)
+    decode.success(nickname)
+  }
+  case json.parse(text, using: decoder) {
+    Ok(nickname) -> Ok(nickname)
+    Error(_) -> Error("Invalid guest request.")
   }
 }
 

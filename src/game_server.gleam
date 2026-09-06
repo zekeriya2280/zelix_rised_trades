@@ -530,6 +530,13 @@ fn choose_best_direction(
   }
 }
 
+/// Public for regression tests: the route MUST start near `source` and end
+/// near `target`, otherwise vehicles depart from the wrong building.
+pub fn grid_route_from_cells(source: Position, target: Position, blocked: List(#(Int, Int))) -> option.Option(List(Position)) {
+  let blocked = list.map(blocked, fn(cell) { Cell(cell.0, cell.1) })
+  grid_route(source, target, blocked)
+}
+
 fn grid_route(source: Position, target: Position, blocked: List(Cell)) -> option.Option(List(Position)) {
   let start = boundary_cell_towards(blocked, source, target)
   let goal = boundary_cell_towards(blocked, target, source)
@@ -602,10 +609,14 @@ fn queue_push_many(queue: GridQueue, cells: List(Cell)) -> GridQueue {
 }
 
 fn reconstruct_path(parents: dict.Dict(Cell, Cell), start: Cell, goal: Cell) -> List(Position) {
-  reconstruct_cells(parents, start, goal, [goal])
+  reconstruct_cells(parents, start, goal, [])
   |> list.map(cell_to_world)
 }
 
+/// Walks the parent chain from `goal` back to `start`. The accumulator is
+/// prepended with each cell, so the final list is already in start->goal order
+/// (it must NOT be reversed: reversing it made vehicles depart from the
+/// destination building and drive to the source, reversing the delivery).
 fn reconstruct_cells(
   parents: dict.Dict(Cell, Cell),
   start: Cell,
@@ -613,10 +624,10 @@ fn reconstruct_cells(
   acc: List(Cell),
 ) -> List(Cell) {
   case current == start {
-    True -> list.reverse(acc)
+    True -> [current, ..acc]
     False -> case dict.get(parents, current) {
-      Ok(previous) -> reconstruct_cells(parents, start, previous, [previous, ..acc])
-      Error(_) -> list.reverse(acc)
+      Ok(previous) -> reconstruct_cells(parents, start, previous, [current, ..acc])
+      Error(_) -> [current, ..acc]
     }
   }
 }

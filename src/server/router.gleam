@@ -53,6 +53,9 @@ pub fn handle(
     "/auth/register" ->
       auth_response(request, "register")
 
+    "/auth/guest" ->
+      auth_response(request, "guest")
+
     _ ->
       text(404, "not found")
   }

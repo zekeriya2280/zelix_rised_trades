@@ -2,7 +2,7 @@ use bevy::input::keyboard::{KeyboardInput, Key};
 use bevy::prelude::*;
 
 use crate::core::resources::GameState;
-use crate::network::auth::{request_login, request_register, AuthClient};
+use crate::network::auth::{request_guest, request_login, request_register, AuthClient};
 use crate::network::NetworkClient;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Default)]
@@ -24,6 +24,7 @@ pub enum AuthField {
     RegisterEmail,
     RegisterPassword,
     RegisterNickname,
+    GuestNickname,
     RoomCode,
 }
 
@@ -94,6 +95,8 @@ pub struct FrontendState {
     pub register_email: String,
     pub register_password: String,
     pub register_nickname: String,
+    pub guest_nickname: String,
+    pub pending_guest: bool,
     pub room_code: String,
     pub message: String,
     pub lobby_message: String,
@@ -114,6 +117,8 @@ impl Default for FrontendState {
             register_email: String::new(),
             register_password: String::new(),
             register_nickname: String::new(),
+            guest_nickname: String::new(),
+            pending_guest: false,
             room_code: String::new(),
             message: String::from("Welcome. Start with Login or Register."),
             lobby_message: String::new(),
@@ -197,6 +202,7 @@ enum Action {
     IntroOnline,
     IntroSettings,
     IntroQuit,
+    GuestSubmit,
     LobbySelectCreate,
     LobbySelectEnter,
     LobbySelectChoice,
@@ -319,6 +325,9 @@ fn spawn_login(commands: &mut Commands) {
         spawn_field(panel, "Email", AuthField::LoginEmail);
         spawn_field(panel, "Password", AuthField::LoginPassword);
         spawn_button(panel, "Login", Action::LoginSubmit);
+        spawn_paragraph(panel, "Developer guest login: no email/password needed. Leave the nickname empty for an auto-generated one.", MUTED);
+        spawn_field(panel, "Nickname", AuthField::GuestNickname);
+        spawn_button(panel, "Guest login (developer)", Action::GuestSubmit);
         spawn_button(panel, "Don't have an account? Register", Action::GoRegister);
         spawn_button(panel, "Back", Action::GoAuthGate);
         spawn_message(panel);
@@ -752,6 +761,7 @@ fn refresh_field_text_system(
             AuthField::RegisterEmail => mask_or_show(&state.register_email, false),
             AuthField::RegisterPassword => mask_or_show(&state.register_password, true),
             AuthField::RegisterNickname => mask_or_show(&state.register_nickname, false),
+            AuthField::GuestNickname => mask_or_show(&state.guest_nickname, false),
             AuthField::RoomCode => mask_or_show(&state.room_code, false),
         };
         *text = Text::new(value);
@@ -916,6 +926,7 @@ fn current_buffer_mut<'a>(state: &'a mut FrontendState, field: AuthField) -> &'a
         AuthField::RegisterEmail => &mut state.register_email,
         AuthField::RegisterPassword => &mut state.register_password,
         AuthField::RegisterNickname => &mut state.register_nickname,
+        AuthField::GuestNickname => &mut state.guest_nickname,
         AuthField::RoomCode => &mut state.room_code,
     }
 }
@@ -923,7 +934,7 @@ fn current_buffer_mut<'a>(state: &'a mut FrontendState, field: AuthField) -> &'a
 fn next_field(current: AuthField, screen: Screen, reverse: bool) -> AuthField {
     match screen {
         Screen::Login => {
-            let order = [AuthField::LoginEmail, AuthField::LoginPassword];
+            let order = [AuthField::LoginEmail, AuthField::LoginPassword, AuthField::GuestNickname];
             cycle_field(current, &order, reverse)
         }
         Screen::Register => {
@@ -992,6 +1003,25 @@ fn screen_button_system(
                                         request_login(&client, email, password);
                     state.message = String::from("Signing in...");
                 }
+                game.paused = true;
+            }
+            Action::GuestSubmit => {
+                let nickname = state.guest_nickname.trim().to_string();
+                let nickname = if nickname.is_empty() {
+                    // Auto-generate a throwaway nickname so the developer can
+                    // just click the button without typing anything.
+                    let nanos = std::time::SystemTime::now()
+                        .duration_since(std::time::UNIX_EPOCH)
+                        .map(|d| d.subsec_nanos())
+                        .unwrap_or(0);
+                    format!("Dev{:04}", nanos % 10_000)
+                } else {
+                    nickname
+                };
+                state.pending_guest = true;
+                state.active_field = None;
+                state.message = format!("Signing in as guest '{}'...", nickname);
+                request_guest(&client, &nickname);
                 game.paused = true;
             }
             Action::RegisterSubmit => {

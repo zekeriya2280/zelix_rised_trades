@@ -48,7 +48,7 @@ decode_identity_response(Text) ->
             {error, ~"Firebase token response was malformed."}
     end.
 
--file("src\\server\\auth.gleam", 245).
+-file("src\\server\\auth.gleam", 317).
 -spec firebase_error_message(integer(), binary()) -> binary().
 firebase_error_message(Code, Body) ->
     case gleam@json:parse(Body, begin
@@ -67,7 +67,7 @@ firebase_error_message(Code, Body) ->
             <<<<"Firebase request failed ("/utf8, (erlang:integer_to_binary(Code))/binary>>/binary, ")."/utf8>>
     end.
 
--file("src\\server\\auth.gleam", 228).
+-file("src\\server\\auth.gleam", 300).
 -spec firebase_post(binary(), binary(), binary()) -> {ok, binary()} | {error, binary()}.
 firebase_post(Api_key, Path, Body) ->
     Url = <<<<<<"https://identitytoolkit.googleapis.com/v1"/utf8, Path/binary>>/binary, "?key="/utf8>>/binary, Api_key/binary>>,
@@ -100,12 +100,12 @@ firebase_post(Api_key, Path, Body) ->
                 file => ~"src\\server\\auth.gleam",
                 module => ~"server/auth",
                 function => ~"firebase_post",
-                line => 230,
+                line => 302,
                 value => _value,
-                start => 8240,
-                'end' => 8276,
-                pattern_start => 8251,
-                pattern_end => 8258
+                start => 11322,
+                'end' => 11358,
+                pattern_start => 11333,
+                pattern_end => 11340
             })
     end.
 
@@ -141,12 +141,12 @@ verify_token(Token) ->
             {error, Message}
     end.
 
--file("src\\server\\auth.gleam", 314).
+-file("src\\server\\auth.gleam", 397).
 -spec failed(binary()) -> auth_result().
 failed(Message) ->
     {auth_result, false, Message, ~"", ~""}.
 
--file("src\\server\\auth.gleam", 287).
+-file("src\\server\\auth.gleam", 370).
 -spec extract_optional(binary(), binary()) -> gleam@option:option(binary()).
 extract_optional(Text, Field) ->
     case gleam@json:parse(Text, begin
@@ -161,13 +161,13 @@ extract_optional(Text, Field) ->
             none
     end.
 
--file("src\\server\\auth.gleam", 283).
+-file("src\\server\\auth.gleam", 366).
 -spec extract(binary(), binary()) -> binary().
 extract(Text, Field) ->
     _pipe = extract_optional(Text, Field),
     gleam@option:unwrap(_pipe, ~"").
 
--file("src\\server\\auth.gleam", 168).
+-file("src\\server\\auth.gleam", 240).
 -spec register(binary(), binary(), binary()) -> auth_result().
 register(Email, Password, Nickname) ->
     case server@firebase_config:firebase_config() of
@@ -221,7 +221,7 @@ register(Email, Password, Nickname) ->
             end
     end.
 
--file("src\\server\\auth.gleam", 297).
+-file("src\\server\\auth.gleam", 380).
 -spec valid_register_input(binary(), binary(), binary()) -> {ok, nil} | {error, binary()}.
 valid_register_input(Email, Password, Nickname) ->
     case string:length(gleam@string:trim(Email)) >= 3 of
@@ -244,7 +244,7 @@ valid_register_input(Email, Password, Nickname) ->
             end
     end.
 
--file("src\\server\\auth.gleam", 258).
+-file("src\\server\\auth.gleam", 330).
 -spec fallback_nickname(binary()) -> binary().
 fallback_nickname(Email) ->
     Local = case gleam@string:split(Email, ~"@") of
@@ -262,7 +262,7 @@ fallback_nickname(Email) ->
             ~"Player"
     end.
 
--file("src\\server\\auth.gleam", 98).
+-file("src\\server\\auth.gleam", 170).
 -spec login(binary(), binary()) -> auth_result().
 login(Email, Password) ->
     case server@firebase_config:firebase_config() of
@@ -328,7 +328,7 @@ login(Email, Password) ->
             end
     end.
 
--file("src\\server\\auth.gleam", 269).
+-file("src\\server\\auth.gleam", 341).
 -spec decode_credentials(binary()) -> {ok, credentials()} | {error, binary()}.
 decode_credentials(Text) ->
     Decoder = begin
@@ -348,6 +348,86 @@ decode_credentials(Text) ->
             {error, ~"Invalid auth request."}
     end.
 
+-file("src\\server\\auth.gleam", 111).
+-spec guest(binary()) -> auth_result().
+-doc(~" Anonymous developer login: creates a Firebase anonymous account (no email /
+ password) and stores the given nickname as its display name so the regular
+ websocket join flow (token verification) works unchanged.").
+guest(Nickname) ->
+    case (string:length(Nickname) >= 3) andalso (string:length(Nickname) =< 24) of
+        false ->
+            failed(~"Nickname must be 3-24 characters.");
+
+        true ->
+            case server@firebase_config:firebase_config() of
+                {error, Message} ->
+                    failed(Message);
+
+                {ok, Config} ->
+                    Body = begin
+                        _pipe = gleam@json:object([{~"returnSecureToken", gleam@json:bool(true)}]),
+                        gleam@json:to_string(_pipe)
+                    end,
+                    case firebase_post(erlang:element(2, Config), ~"/accounts:signUp", Body) of
+                        {ok, Text} ->
+                            Token = extract(Text, ~"idToken"),
+                            Local_id = extract(Text, ~"localId"),
+                            case Token =:= ~"" of
+                                true ->
+                                    failed(~"Firebase did not return an ID token. Is the Anonymous provider enabled in the Firebase console?");
+
+                                false ->
+                                    Update = begin
+                                        _pipe@1 = gleam@json:object([{~"idToken", gleam@json:string(Token)}, {~"displayName", gleam@json:string(Nickname)}, {~"returnSecureToken", gleam@json:bool(true)}]),
+                                        gleam@json:to_string(_pipe@1)
+                                    end,
+                                    case firebase_post(erlang:element(2, Config), ~"/accounts:update", Update) of
+                                        {ok, Updated} ->
+                                            Final_token = begin
+                                                _pipe@2 = extract_optional(Updated, ~"idToken"),
+                                                gleam@option:unwrap(_pipe@2, Token)
+                                            end,
+                                            Final_nickname = begin
+                                                _pipe@3 = extract_optional(Updated, ~"displayName"),
+                                                _pipe@4 = gleam@option:unwrap(_pipe@3, Nickname),
+                                                gleam@string:trim(_pipe@4)
+                                            end,
+                                            case (string:length(Final_nickname) >= 3) andalso (string:length(Final_nickname) =< 24) of
+                                                true ->
+                                                    server@firestore:save_player(Final_token, Local_id, Final_nickname),
+                                                    {auth_result, true, <<<<"Guest session started. Welcome, "/utf8, Final_nickname/binary>>/binary, "."/utf8>>, Final_nickname, Final_token};
+
+                                                false ->
+                                                    failed(~"Firebase created the guest account but did not store a valid nickname.")
+                                            end;
+
+                                        {error, Message@1} ->
+                                            failed(<<"Guest account created, but nickname setup failed: "/utf8, Message@1/binary>>)
+                                    end
+                            end;
+
+                        {error, Message@2} ->
+                            failed(Message@2)
+                    end
+            end
+    end.
+
+-file("src\\server\\auth.gleam", 355).
+-spec decode_guest_nickname(binary()) -> {ok, binary()} | {error, binary()}.
+decode_guest_nickname(Text) ->
+    Decoder = begin
+        gleam@dynamic@decode:field(~"nickname", {decoder, fun gleam@dynamic@decode:decode_string/1}, fun(Nickname) ->
+            gleam@dynamic@decode:success(Nickname)
+        end)
+    end,
+    case gleam@json:parse(Text, Decoder) of
+        {ok, Nickname} ->
+            {ok, Nickname};
+
+        {error, _} ->
+            {error, ~"Invalid guest request."}
+    end.
+
 -file("src\\server\\auth.gleam", 76).
 -spec handle(binary(), bitstring()) -> auth_result().
 handle(Path, Body) ->
@@ -356,31 +436,43 @@ handle(Path, Body) ->
             failed(~"Request body is not valid UTF-8.");
 
         {ok, Text} ->
-            case decode_credentials(Text) of
-                {error, Message} ->
-                    failed(Message);
+            case Path of
+                ~"guest" ->
+                    case decode_guest_nickname(Text) of
+                        {error, Message} ->
+                            failed(Message);
 
-                {ok, Credentials} ->
-                    case Path of
-                        ~"login" ->
-                            login(erlang:element(2, Credentials), erlang:element(3, Credentials));
+                        {ok, Nickname} ->
+                            guest(gleam@string:trim(Nickname))
+                    end;
 
-                        ~"register" ->
-                            Nickname = begin
-                                _pipe = erlang:element(4, Credentials),
-                                _pipe@1 = gleam@option:unwrap(_pipe, ~""),
-                                gleam@string:trim(_pipe@1)
-                            end,
-                            case valid_register_input(erlang:element(2, Credentials), erlang:element(3, Credentials), Nickname) of
-                                {ok, nil} ->
-                                    register(erlang:element(2, Credentials), erlang:element(3, Credentials), Nickname);
+                _ ->
+                    case decode_credentials(Text) of
+                        {error, Message@1} ->
+                            failed(Message@1);
 
-                                {error, Message@1} ->
-                                    failed(Message@1)
-                            end;
+                        {ok, Credentials} ->
+                            case Path of
+                                ~"login" ->
+                                    login(erlang:element(2, Credentials), erlang:element(3, Credentials));
 
-                        _ ->
-                            failed(~"Unknown auth action.")
+                                ~"register" ->
+                                    Nickname@1 = begin
+                                        _pipe = erlang:element(4, Credentials),
+                                        _pipe@1 = gleam@option:unwrap(_pipe, ~""),
+                                        gleam@string:trim(_pipe@1)
+                                    end,
+                                    case valid_register_input(erlang:element(2, Credentials), erlang:element(3, Credentials), Nickname@1) of
+                                        {ok, nil} ->
+                                            register(erlang:element(2, Credentials), erlang:element(3, Credentials), Nickname@1);
+
+                                        {error, Message@2} ->
+                                            failed(Message@2)
+                                    end;
+
+                                _ ->
+                                    failed(~"Unknown auth action.")
+                            end
                     end
             end
     end.
