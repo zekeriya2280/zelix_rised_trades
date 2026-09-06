@@ -29,6 +29,15 @@ pub const ROAD_Z: f32 = 0.0;
 pub const VEHICLE_Z: f32 = 5.0;
 pub const BUILDING_Z: f32 = 20.0;
 
+/// Procedurally generated terrain material atlas. Each 2x2 block picks one
+/// cell of this atlas instead of a flat vertex colour, so the map reads as a
+/// mosaic of distinct materials (ocean, lake, grass, wheat, rock, snow...)
+/// rather than a handful of solid colours. Generated offline as a seamless,
+/// tileable texture per material (see `game_client/assets/terrain_atlas.png`).
+pub const TERRAIN_ATLAS_PATH: &str = "terrain_atlas.png";
+pub const ATLAS_COLS: usize = 5;
+pub const ATLAS_ROWS: usize = 3;
+
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum TerrainType {
     Sea,
@@ -107,20 +116,22 @@ pub fn setup_map_system(
     mut commands: Commands,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<ColorMaterial>>,
+    asset_server: Res<AssetServer>,
 ) {
     let ter = build_terrain_grid();
     let half = ter.half_world();
 
-    // --- Terrain tiles (one quad per cell, flat colours) ---
+    // --- Terrain tiles (one quad per cell, textured from the material atlas) ---
     let mut vertices: Vec<[f32; 3]> = Vec::with_capacity(GRID_SIZE * GRID_SIZE * 4);
-    let mut colors: Vec<[f32; 4]> = Vec::with_capacity(GRID_SIZE * GRID_SIZE * 4);
+    let mut uvs: Vec<[f32; 2]> = Vec::with_capacity(GRID_SIZE * GRID_SIZE * 4);
     let mut indices: Vec<u32> = Vec::with_capacity(GRID_SIZE * GRID_SIZE * 6);
 
     for y in 0..GRID_SIZE {
         for x in 0..GRID_SIZE {
             let wx = -half + x as f32 * CELL_SIZE;
             let wy = -half + y as f32 * CELL_SIZE;
-            let color = terrain_color(ter.get(x, y));
+            let is_edge = x < 4 || y < 4 || x >= GRID_SIZE - 4 || y >= GRID_SIZE - 4;
+            let material_index = terrain_material_index(ter.get(x, y), x, y, is_edge);
             let base = vertices.len() as u32;
 
             vertices.extend_from_slice(&[
@@ -129,7 +140,7 @@ pub fn setup_map_system(
                 [wx + CELL_SIZE, wy + CELL_SIZE, 0.0],
                 [wx, wy + CELL_SIZE, 0.0],
             ]);
-            colors.extend_from_slice(&[color; 4]);
+            uvs.extend_from_slice(&atlas_uv_rect(material_index));
             indices.extend_from_slice(&[base, base + 1, base + 2, base, base + 2, base + 3]);
         }
     }
@@ -139,10 +150,11 @@ pub fn setup_map_system(
         RenderAssetUsages::default(),
     );
     tile_mesh.insert_attribute(Mesh::ATTRIBUTE_POSITION, vertices);
-    tile_mesh.insert_attribute(Mesh::ATTRIBUTE_COLOR, colors);
+    tile_mesh.insert_attribute(Mesh::ATTRIBUTE_UV_0, uvs);
     tile_mesh.insert_indices(Indices::U32(indices));
 
-    let terrain_material = materials.add(ColorMaterial::default());
+    let atlas_handle: Handle<Image> = asset_server.load(TERRAIN_ATLAS_PATH);
+    let terrain_material = materials.add(ColorMaterial::from(atlas_handle));
 
     commands.spawn((
         Mesh2d(meshes.add(tile_mesh)),
@@ -187,9 +199,10 @@ pub fn setup_grid_lines(
     mesh.insert_attribute(Mesh::ATTRIBUTE_POSITION, vertices);
     mesh.insert_indices(Indices::U32(indices));
 
-    // Semi-transparent material keeps the underlying terrain visible through
-    // the grid while the entity Transform controls the Z layer.
-    let grid_material = materials.add(ColorMaterial::from(Color::srgba(1.0, 1.0, 1.0, 0.14)));
+    // Black, semi-transparent material: dark enough to read as clean black
+    // grid lines against every terrain colour while still letting the
+    // terrain show through. The entity Transform controls the Z layer.
+    let grid_material = materials.add(ColorMaterial::from(Color::srgba(0.0, 0.0, 0.0, 0.45)));
 
     commands.spawn((
         Mesh2d(meshes.add(mesh)),
@@ -270,11 +283,68 @@ fn build_terrain_grid() -> TerrainGrid {
     }
 }
 
-fn terrain_color(terrain: TerrainType) -> [f32; 4] {
+/// Number of colour/material variants in each terrain family. Must match the
+/// atlas layout in `generate_atlas.py` exactly: 3 ocean + 3 lake + 5 land +
+/// 4 mountain = 15 cells, laid out row-major in a 5x3 grid.
+const OCEAN_VARIANTS: usize = 3;
+const LAKE_VARIANTS: usize = 3;
+const LAND_VARIANTS: usize = 5;
+const MOUNTAIN_VARIANTS: usize = 4;
+
+const OCEAN_BASE: usize = 0;
+const LAKE_BASE: usize = OCEAN_BASE + OCEAN_VARIANTS; // 3
+const LAND_BASE: usize = LAKE_BASE + LAKE_VARIANTS; // 6
+const MOUNTAIN_BASE: usize = LAND_BASE + LAND_VARIANTS; // 11
+
+/// Atlas cell (material index, 0..15) for one terrain cell. Every 2x2 cell
+/// block (matching the building footprint) rolls its own material, so
+/// mountains/plains/lakes read as a varied, hand-painted mosaic instead of
+/// flat single-colour bands. `is_edge` distinguishes the forced sea border
+/// (ocean material) from inland sea cells, which use the lake materials
+/// instead. This is a purely visual choice: it does not change
+/// `TerrainType`, so buildability (which only ever checks for
+/// `TerrainType::Land`) is unaffected.
+fn terrain_material_index(terrain: TerrainType, x: usize, y: usize, is_edge: bool) -> usize {
+    let block_x = (x / 2) as u32;
+    let block_y = (y / 2) as u32;
+    let v = block_hash(block_x, block_y);
+
     match terrain {
-        TerrainType::Sea => [0.06, 0.16, 0.55, 1.0],
-        TerrainType::Land => [0.40, 0.65, 0.30, 1.0],
-        TerrainType::Mountain => [0.52, 0.48, 0.45, 1.0],
+        TerrainType::Sea if is_edge => OCEAN_BASE + pick_index(OCEAN_VARIANTS, v),
+        TerrainType::Sea => LAKE_BASE + pick_index(LAKE_VARIANTS, v),
+        TerrainType::Land => LAND_BASE + pick_index(LAND_VARIANTS, v),
+        TerrainType::Mountain => MOUNTAIN_BASE + pick_index(MOUNTAIN_VARIANTS, v),
     }
+}
+
+/// Deterministic, seedless pseudo-random value in `[0, 1)` for one 2x2 block.
+/// Same block coordinates always produce the same value, so the material
+/// choice above is stable across frames/restarts without storing anything.
+fn block_hash(block_x: u32, block_y: u32) -> f32 {
+    let mut h = block_x.wrapping_mul(0x27d4_eb2d) ^ block_y.wrapping_mul(0x1656_67b1);
+    h ^= h >> 15;
+    h = h.wrapping_mul(0x85eb_ca6b);
+    h ^= h >> 13;
+    (h & 0xFFFF) as f32 / 65535.0
+}
+
+/// Pick one variant index out of `count` using a `[0, 1)` value.
+fn pick_index(count: usize, v: f32) -> usize {
+    ((v * count as f32) as usize).min(count - 1)
+}
+
+/// UV corners (matching the vertex winding in `setup_map_system`) for the
+/// atlas cell that holds `material_index`. Each terrain quad samples exactly
+/// one atlas cell, so no wrapping/tiling inside the shader is needed — the
+/// atlas image itself is a seamless texture per material, and identical
+/// neighbouring blocks simply repeat the same cell.
+fn atlas_uv_rect(material_index: usize) -> [[f32; 2]; 4] {
+    let col = (material_index % ATLAS_COLS) as f32;
+    let row = (material_index / ATLAS_COLS) as f32;
+    let u0 = col / ATLAS_COLS as f32;
+    let v0 = row / ATLAS_ROWS as f32;
+    let u1 = (col + 1.0) / ATLAS_COLS as f32;
+    let v1 = (row + 1.0) / ATLAS_ROWS as f32;
+    [[u0, v1], [u1, v1], [u1, v0], [u0, v0]]
 }
 
