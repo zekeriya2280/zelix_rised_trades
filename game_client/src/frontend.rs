@@ -151,13 +151,6 @@ struct LobbySubPanel {
     kind: LobbyPanel,
 }
 
-/// A selectable game-mode option on the Create Room panel. The active selection
-/// is styled by `update_mode_options_system`.
-#[derive(Component)]
-struct ModeOption {
-    mode: LobbyMode,
-}
-
 /// The container that hosts the dynamic list of rooms on the Enter Room panel.
 #[derive(Component)]
 struct RoomList;
@@ -218,6 +211,9 @@ const TEXT: Color = Color::srgb(0.96, 0.97, 1.0);
 const MUTED: Color = Color::srgb(0.72, 0.76, 0.82);
 const DANGER: Color = Color::srgb(1.0, 0.45, 0.45);
 
+/// Frontend state is intentionally independent from the authoritative online
+/// world. The network layer drives `Screen::Game` when the room starts, while
+/// the world itself is synchronized from server snapshots.
 pub struct FrontendPlugin;
 
 impl Plugin for FrontendPlugin {
@@ -235,10 +231,8 @@ impl Plugin for FrontendPlugin {
                     keyboard_input_system,
                     refresh_field_text_system,
                     refresh_status_texts_system,
-                    update_mode_options_system,
                     refresh_room_list_system,
                     room_pick_system,
-                    mode_option_system,
                     sync_game_pause_system,
                 ),
             );
@@ -364,25 +358,22 @@ fn spawn_lobby(commands: &mut Commands) {
         spawn_button(l, "Main Menu", Action::LobbyBack);
         l.spawn((Text::new(""), TextFont { font_size: FontSize::Px(14.0), ..default() }, TextColor(MUTED), LobbyMessageLabel));
     });
-    spawn_lobby_panel(commands, LobbyPanel::CreateRoom, "Online · Create Room", |l| {
-        spawn_paragraph(l, "Create a room and then wait for players. Maximum 5 players.", MUTED);
-        spawn_paragraph(l, "Game mode", ACCENT);
-        spawn_mode_option(l, "Online", LobbyMode::Online);
-        spawn_mode_option(l, "Multiplayer", LobbyMode::Multiplayer);
-        spawn_paragraph(l, "Room ID is generated automatically after Create Room.", TEXT);
+    spawn_lobby_panel(commands, LobbyPanel::CreateRoom, "Create Room", |l| {
+        spawn_paragraph(l, "Create a room and wait for other players to join. Maximum 5 players.", MUTED);
+        spawn_hint(l, "Room ID is generated automatically. Your lobby mode (Online / Multiplayer) is set by how you entered the lobby.");
         spawn_button(l, "Create Room", Action::LobbyCreate);
-        spawn_button(l, "← Back to Online", Action::LobbySelectChoice);
+        spawn_button(l, "← Back", Action::LobbySelectChoice);
     });
-    spawn_lobby_panel(commands, LobbyPanel::EnterRoom, "Online · Enter Room", |l| {
+    spawn_lobby_panel(commands, LobbyPanel::EnterRoom, "Enter Room", |l| {
         spawn_paragraph(l, "Choose an open room or type its Room ID, then press Enter Game.", MUTED);
         spawn_field(l, "Room ID", AuthField::RoomCode);
         l.spawn((Node { flex_direction: FlexDirection::Column, row_gap: Val::Px(6.0), ..default() }, RoomList));
         spawn_hint(l, "Only waiting rooms can be joined.");
         spawn_button(l, "Enter Game", Action::LobbyJoin);
-        spawn_button(l, "← Back to Online", Action::LobbySelectChoice);
+        spawn_button(l, "← Back", Action::LobbySelectChoice);
         l.spawn((Text::new(""), TextFont { font_size: FontSize::Px(14.0), ..default() }, TextColor(DANGER), LobbyMessageLabel));
     });
-    spawn_lobby_panel(commands, LobbyPanel::WaitingRoom, "Online · Waiting Room", |l| {
+    spawn_lobby_panel(commands, LobbyPanel::WaitingRoom, "Waiting Room", |l| {
         spawn_paragraph(l, "Room joined successfully. Wait for the host to start the game.", MUTED);
         l.spawn((Text::new(""), TextFont { font_size: FontSize::Px(18.0), ..default() }, TextColor(ACCENT), LobbyMessageLabel));
         spawn_button(l, "Start Game (Host)", Action::LobbyStart);
@@ -437,34 +428,6 @@ where
         });
 }
 
-/// A selectable game-mode row on the Create Room panel.
-#[allow(dead_code)]
-fn spawn_mode_option(parent: &mut ChildSpawnerCommands, label: &str, mode: LobbyMode) {
-    parent
-        .spawn((
-            Button,
-            Interaction::default(),
-            ModeOption { mode },
-            Node {
-                width: Val::Percent(100.0),
-                min_height: Val::Px(42.0),
-                padding: UiRect::horizontal(Val::Px(14.0)),
-                justify_content: JustifyContent::Center,
-                align_items: AlignItems::Center,
-                border: UiRect::all(Val::Px(1.0)),
-                ..default()
-            },
-            BackgroundColor(Color::srgb(0.14, 0.15, 0.18)),
-            BorderColor::all(Color::srgb(0.28, 0.32, 0.40)),
-        ))
-        .with_children(|row| {
-            row.spawn((
-                Text::new(label),
-                TextFont { font_size: FontSize::Px(15.0), ..default() },
-                TextColor(TEXT),
-            ));
-        });
-}
 
 /// A selectable row for an existing room on the Enter Room panel.
 fn spawn_room_pick(
@@ -653,45 +616,6 @@ fn sync_screen_visibility_system(
         let visible = root.screen == state.screen
             && sub.map(|panel| panel.kind == state.lobby_panel).unwrap_or(true);
         *visibility = if visible { Visibility::Visible } else { Visibility::Hidden };
-    }
-}
-/// Highlights the game-mode currently selected on the Create Room panel.
-fn update_mode_options_system(
-    state: Res<FrontendState>,
-    mut options: Query<(&ModeOption, &mut BackgroundColor, &mut BorderColor, &Children)>,
-    mut texts: Query<&mut TextColor>,
-) {
-    for (option, mut bg, mut border, children) in &mut options {
-        let selected = option.mode == state.active_lobby_mode;
-        *bg = BackgroundColor(if selected {
-            Color::srgb(0.20, 0.30, 0.45)
-        } else {
-            Color::srgb(0.14, 0.15, 0.18)
-        });
-        *border = BorderColor::all(if selected {
-            ACCENT
-        } else {
-            Color::srgb(0.28, 0.32, 0.40)
-        });
-        for child in children {
-            if let Ok(mut color) = texts.get_mut(*child) {
-                *color = TextColor(if selected { ACCENT } else { TEXT });
-            }
-        }
-    }
-}
-
-/// Rebuilds the Enter Room panel's room list whenever the server's room set
-/// changes, so new rooms appear without restarting.
-fn mode_option_system(
-    mut state: ResMut<FrontendState>,
-    buttons: Query<(&Interaction, &ModeOption), (Changed<Interaction>, With<Button>)>,
-) {
-    for (interaction, option) in &buttons {
-        if *interaction == Interaction::Pressed {
-            state.active_lobby_mode = option.mode;
-            state.lobby_message = format!("Selected {} mode.", option.mode.label());
-        }
     }
 }
 
@@ -1077,11 +1001,14 @@ fn screen_button_system(
             }
             Action::LobbySelectCreate => {
                 state.lobby_panel = LobbyPanel::CreateRoom;
-                state.active_lobby_mode = LobbyMode::Online;
+                // Do NOT override active_lobby_mode here — it was set when the
+                // user entered the lobby via IntroOnline (Online) or IntroMulti
+                // (Multiplayer) and must be preserved so Create Room uses the
+                // correct game mode automatically.
                 state.current_room = None;
                 state.current_room_is_host = false;
-                state.active_field = Some(AuthField::RoomCode);
-                state.lobby_message = String::from("Select a game mode, then Create Room.");
+                state.active_field = None;
+                state.lobby_message = format!("Mode: {}. Press Create Room when ready.", state.active_lobby_mode.label());
                 game.paused = true;
             }
             Action::LobbySelectEnter => {

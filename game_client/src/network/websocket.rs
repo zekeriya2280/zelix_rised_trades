@@ -310,7 +310,7 @@ pub fn apply_snapshot_system(
     mut commands: Commands,
     mut pending: ResMut<PendingSnapshot>,
     asset_server: Res<AssetServer>,
-    network: Res<NetworkClient>,
+    _network: Res<NetworkClient>,
     server_entities: Query<(Entity, &ServerId, &OwnerId), With<ServerOwned>>,
     terrain: Res<TerrainGrid>,
     server_buildings: Query<
@@ -323,12 +323,11 @@ pub fn apply_snapshot_system(
 ) {
     let Some(snapshot) = pending.0.take() else { return; };
 
-    // Only replicate this client's OWN entities. Other players' buildings,
-    // vehicles and their delivery roads must never appear on screen — they
-    // were showing up as unwanted objects/movements besides the player's own
-    // truck during factory/warehouse/transportation gameplay.
-    let my_id = network.player_id;
-    let is_mine = |owner_id: u64| my_id == Some(owner_id);
+    // The server is authoritative for the shared online world.
+    // Every client in the same room must render the complete server snapshot,
+    // including entities owned by other players. Ownership is kept on the
+    // entity for interaction/permission logic, but it must NOT be used as a
+    // visibility filter.
 
     // Reconcile by authoritative server id instead of destroying/recreating the
     // whole world every snapshot. This removes a large amount of Bevy ECS and
@@ -342,7 +341,6 @@ pub fn apply_snapshot_system(
     let mut seen = HashSet::new();
 
     for bank in snapshot.banks {
-        if !is_mine(bank.owner_id) { continue; }
         seen.insert(bank.id);
         let entity = existing.get(&bank.id).copied().unwrap_or_else(|| {
             commands.spawn((
@@ -364,7 +362,6 @@ pub fn apply_snapshot_system(
     }
 
     for factory in snapshot.factories {
-        if !is_mine(factory.owner_id) { continue; }
         seen.insert(factory.id);
         let entity = existing.get(&factory.id).copied().unwrap_or_else(|| {
             commands.spawn((
@@ -386,7 +383,6 @@ pub fn apply_snapshot_system(
     }
 
     for warehouse in snapshot.warehouses {
-        if !is_mine(warehouse.owner_id) { continue; }
         seen.insert(warehouse.id);
         let entity = existing.get(&warehouse.id).copied().unwrap_or_else(|| {
             commands.spawn((
@@ -407,7 +403,6 @@ pub fn apply_snapshot_system(
     }
 
     for building in snapshot.gatherers {
-        if !is_mine(building.owner_id) { continue; }
         seen.insert(building.id);
         let entity = existing.get(&building.id).copied().unwrap_or_else(|| {
             commands.spawn((
@@ -428,7 +423,6 @@ pub fn apply_snapshot_system(
     }
 
     for building in snapshot.farms {
-        if !is_mine(building.owner_id) { continue; }
         seen.insert(building.id);
         let entity = existing.get(&building.id).copied().unwrap_or_else(|| {
             commands.spawn((
@@ -449,9 +443,9 @@ pub fn apply_snapshot_system(
     }
 
     for vehicle in snapshot.vehicles {
-        // Skip other players' vehicles entirely: spawning them also draws
-        // their delivery roads, which appeared as unwanted movement.
-        if !is_mine(vehicle.owner_id) { continue; }
+        // Vehicles from every player are part of the shared authoritative world.
+        // Each client renders them; ownership remains attached for gameplay
+        // permissions and interaction checks elsewhere.
         seen.insert(vehicle.id);
         let is_new = !existing.contains_key(&vehicle.id);
         let entity = existing.get(&vehicle.id).copied().unwrap_or_else(|| {
@@ -504,8 +498,11 @@ pub fn apply_snapshot_system(
         }
     }
 
-    for (entity, id, owner) in server_entities.iter() {
-        if !seen.contains(&id.0) || !is_mine(owner.0) {
+    // A snapshot is authoritative: any server entity not present in the
+    // latest snapshot must disappear locally. This prevents stale/locally
+    // spawned server visuals from making two clients show different worlds.
+    for (entity, id, _owner) in server_entities.iter() {
+        if !seen.contains(&id.0) {
             commands.entity(entity).despawn();
         }
     }
