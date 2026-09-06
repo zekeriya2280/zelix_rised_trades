@@ -1,27 +1,16 @@
 param(
-    [string]$ServerUrl="",
+    [string]$ServerUrl="http://10.0.2.2:8765",
     [string[]]$Abis=@("arm64-v8a","armeabi-v7a","x86_64"),
     [ValidateSet("debug","release")]
     [string]$Profile="release"
 )
 
 $ErrorActionPreference = "Stop"
-
-if ([string]::IsNullOrWhiteSpace($ServerUrl)) {
-    if ($Profile -eq "release") {
-        throw "Release Android build requires -ServerUrl with the public HTTPS/WSS-capable game server endpoint."
-    }
-    $ServerUrl = "http://10.0.2.2:8765"
-}
-if ($Profile -eq "release" -and $ServerUrl -notmatch '^https?://') {
-    throw "ServerUrl must start with http:// or https://."
-}
 $env:GAME_SERVER_URL=$ServerUrl
 
 $assetTarget = "android/app/src/main/assets"
 New-Item -ItemType Directory -Force -Path $assetTarget | Out-Null
 Copy-Item -Recurse -Force "game_client/assets/*" $assetTarget
-@{ server_url = $ServerUrl } | ConvertTo-Json -Compress | Set-Content -Path "$assetTarget/game_config.json" -Encoding utf8
 
 $args = @()
 foreach ($abi in $Abis) {

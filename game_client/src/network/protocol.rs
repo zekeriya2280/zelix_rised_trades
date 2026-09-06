@@ -84,6 +84,12 @@ pub struct WarehouseState { pub id: u64, pub owner_id: u64, pub x: f32, pub y: f
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct SimpleBuildingState { pub id: u64, pub owner_id: u64, pub x: f32, pub y: f32 }
 #[derive(Serialize, Deserialize, Clone, Debug)]
+pub struct PathPoint {
+    pub x: f32,
+    pub y: f32,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug, Default)]
 pub struct VehicleState {
     pub id: u64,
     pub owner_id: u64,
@@ -92,6 +98,10 @@ pub struct VehicleState {
     pub target_x: f32,
     pub target_y: f32,
     pub speed: f32,
+    #[serde(default)]
+    pub path: Vec<PathPoint>,
+    #[serde(default)]
+    pub path_index: u32,
 }
 
 impl VehicleState {
@@ -102,6 +112,7 @@ impl VehicleState {
             && self.target_x.is_finite()
             && self.target_y.is_finite()
             && self.speed.is_finite()
+            && self.path.iter().all(|point| point.x.is_finite() && point.y.is_finite())
     }
 }
 
@@ -156,6 +167,8 @@ mod tests {
             target_x: 1.0,
             target_y: 1.0,
             speed: 2.0,
+            path: vec![PathPoint { x: 0.0, y: 0.0 }],
+            path_index: 0,
         };
         assert!(!state.is_finite());
     }

@@ -102,7 +102,6 @@ pub struct FrontendState {
     pub lobby_panel: LobbyPanel,
     pub current_room: Option<String>,
     pub current_room_is_host: bool,
-    pub pending_auth_email: Option<String>,
 }
 
 impl Default for FrontendState {
@@ -123,7 +122,6 @@ impl Default for FrontendState {
             lobby_panel: LobbyPanel::Choice,
             current_room: None,
             current_room_is_host: false,
-            pending_auth_email: None,
         }
     }
 }
@@ -149,6 +147,13 @@ struct LobbyMessageLabel;
 #[derive(Component)]
 struct LobbySubPanel {
     kind: LobbyPanel,
+}
+
+/// A selectable game-mode option on the Create Room panel. The active selection
+/// is styled by `update_mode_options_system`.
+#[derive(Component)]
+struct ModeOption {
+    mode: LobbyMode,
 }
 
 /// The container that hosts the dynamic list of rooms on the Enter Room panel.
@@ -211,9 +216,6 @@ const TEXT: Color = Color::srgb(0.96, 0.97, 1.0);
 const MUTED: Color = Color::srgb(0.72, 0.76, 0.82);
 const DANGER: Color = Color::srgb(1.0, 0.45, 0.45);
 
-/// Frontend state is intentionally independent from the authoritative online
-/// world. The network layer drives `Screen::Game` when the room starts, while
-/// the world itself is synchronized from server snapshots.
 pub struct FrontendPlugin;
 
 impl Plugin for FrontendPlugin {
@@ -231,6 +233,7 @@ impl Plugin for FrontendPlugin {
                     keyboard_input_system,
                     refresh_field_text_system,
                     refresh_status_texts_system,
+                    update_mode_options_system,
                     refresh_room_list_system,
                     room_pick_system,
                     sync_game_pause_system,
@@ -358,22 +361,22 @@ fn spawn_lobby(commands: &mut Commands) {
         spawn_button(l, "Main Menu", Action::LobbyBack);
         l.spawn((Text::new(""), TextFont { font_size: FontSize::Px(14.0), ..default() }, TextColor(MUTED), LobbyMessageLabel));
     });
-    spawn_lobby_panel(commands, LobbyPanel::CreateRoom, "Create Room", |l| {
-        spawn_paragraph(l, "Create a room and wait for other players to join. Maximum 5 players.", MUTED);
-        spawn_hint(l, "Room ID is generated automatically. Your lobby mode (Online / Multiplayer) is set by how you entered the lobby.");
+    spawn_lobby_panel(commands, LobbyPanel::CreateRoom, "Online · Create Room", |l| {
+        spawn_paragraph(l, "Create a room and then wait for players. Maximum 5 players.", MUTED);
+        spawn_paragraph(l, "Room ID: generated after Create Room", TEXT);
+        spawn_paragraph(l, "Players: 1 / 5", TEXT);
         spawn_button(l, "Create Room", Action::LobbyCreate);
-        spawn_button(l, "← Back", Action::LobbySelectChoice);
+        spawn_button(l, "← Back to Online", Action::LobbySelectChoice);
     });
-    spawn_lobby_panel(commands, LobbyPanel::EnterRoom, "Enter Room", |l| {
+    spawn_lobby_panel(commands, LobbyPanel::EnterRoom, "Online · Enter Room", |l| {
         spawn_paragraph(l, "Choose an open room or type its Room ID, then press Enter Game.", MUTED);
         spawn_field(l, "Room ID", AuthField::RoomCode);
         l.spawn((Node { flex_direction: FlexDirection::Column, row_gap: Val::Px(6.0), ..default() }, RoomList));
         spawn_hint(l, "Only waiting rooms can be joined.");
         spawn_button(l, "Enter Game", Action::LobbyJoin);
-        spawn_button(l, "← Back", Action::LobbySelectChoice);
-        l.spawn((Text::new(""), TextFont { font_size: FontSize::Px(14.0), ..default() }, TextColor(DANGER), LobbyMessageLabel));
+        spawn_button(l, "← Back to Online", Action::LobbySelectChoice);
     });
-    spawn_lobby_panel(commands, LobbyPanel::WaitingRoom, "Waiting Room", |l| {
+    spawn_lobby_panel(commands, LobbyPanel::WaitingRoom, "Online · Waiting Room", |l| {
         spawn_paragraph(l, "Room joined successfully. Wait for the host to start the game.", MUTED);
         l.spawn((Text::new(""), TextFont { font_size: FontSize::Px(18.0), ..default() }, TextColor(ACCENT), LobbyMessageLabel));
         spawn_button(l, "Start Game (Host)", Action::LobbyStart);
@@ -428,6 +431,34 @@ where
         });
 }
 
+/// A selectable game-mode row on the Create Room panel.
+#[allow(dead_code)]
+fn spawn_mode_option(parent: &mut ChildSpawnerCommands, label: &str, mode: LobbyMode) {
+    parent
+        .spawn((
+            Button,
+            Interaction::default(),
+            ModeOption { mode },
+            Node {
+                width: Val::Percent(100.0),
+                min_height: Val::Px(42.0),
+                padding: UiRect::horizontal(Val::Px(14.0)),
+                justify_content: JustifyContent::Center,
+                align_items: AlignItems::Center,
+                border: UiRect::all(Val::Px(1.0)),
+                ..default()
+            },
+            BackgroundColor(Color::srgb(0.14, 0.15, 0.18)),
+            BorderColor::all(Color::srgb(0.28, 0.32, 0.40)),
+        ))
+        .with_children(|row| {
+            row.spawn((
+                Text::new(label),
+                TextFont { font_size: FontSize::Px(15.0), ..default() },
+                TextColor(TEXT),
+            ));
+        });
+}
 
 /// A selectable row for an existing room on the Enter Room panel.
 fn spawn_room_pick(
@@ -618,7 +649,34 @@ fn sync_screen_visibility_system(
         *visibility = if visible { Visibility::Visible } else { Visibility::Hidden };
     }
 }
+/// Highlights the game-mode currently selected on the Create Room panel.
+fn update_mode_options_system(
+    state: Res<FrontendState>,
+    mut options: Query<(&ModeOption, &mut BackgroundColor, &mut BorderColor, &Children)>,
+    mut texts: Query<&mut TextColor>,
+) {
+    for (option, mut bg, mut border, children) in &mut options {
+        let selected = option.mode == state.active_lobby_mode;
+        *bg = BackgroundColor(if selected {
+            Color::srgb(0.20, 0.30, 0.45)
+        } else {
+            Color::srgb(0.14, 0.15, 0.18)
+        });
+        *border = BorderColor::all(if selected {
+            ACCENT
+        } else {
+            Color::srgb(0.28, 0.32, 0.40)
+        });
+        for child in children {
+            if let Ok(mut color) = texts.get_mut(*child) {
+                *color = TextColor(if selected { ACCENT } else { TEXT });
+            }
+        }
+    }
+}
 
+/// Rebuilds the Enter Room panel's room list whenever the server's room set
+/// changes, so new rooms appear without restarting.
 fn refresh_room_list_system(
     lobby: Res<LobbyStore>,
     container: Query<(Entity, &Children), With<RoomList>>,
@@ -799,44 +857,29 @@ fn keyboard_input_system(
             state.active_field = Some(next_field(focused, state.screen, reverse));
             continue;
         }
-        if keys.just_pressed(KeyCode::Enter) {
-            // Enter submits the current screen's primary action.
+                if keys.just_pressed(KeyCode::Enter) {
+            // Enter submits the current screen's primary action (login / register)
+            // to the server; the result arrives on the next frame poll.
             match state.screen {
                 Screen::Login => {
-                    let email = state.login_email.trim().to_string();
-                    let password = state.login_password.clone();
+                    let email = state.login_email.trim();
+                    let password = state.login_password.as_str();
                     if email.is_empty() || password.is_empty() {
                         state.message = String::from("Fill in email and password.");
                     } else {
-                        state.pending_auth_email = Some(email.clone());
-                        request_login(&client, &email, &password);
+                        request_login(&client, email, password);
                         state.message = String::from("Signing in...");
                     }
                 }
                 Screen::Register => {
-                    let email = state.register_email.trim().to_string();
-                    let password = state.register_password.clone();
-                    let nickname = state.register_nickname.trim().to_string();
+                    let email = state.register_email.trim();
+                    let password = state.register_password.as_str();
+                    let nickname = state.register_nickname.trim();
                     if email.is_empty() || password.is_empty() || nickname.is_empty() {
                         state.message = String::from("Email, password, and nickname are required.");
-                    } else {
-                        state.pending_auth_email = Some(email.clone());
-                        request_register(&client, &email, &password, &nickname);
+                                        } else {
+                        request_register(&client, email, password, nickname);
                         state.message = String::from("Creating account...");
-                    }
-                }
-                Screen::Lobby => {
-                    // Enter key joins the room from Enter Room panel.
-                    if state.lobby_panel == LobbyPanel::EnterRoom {
-                        let code = state.room_code.trim().to_string();
-                        if code.is_empty() {
-                            state.lobby_message = String::from("Enter a Room ID first.");
-                        } else {
-                            state.active_field = None;
-                            state.lobby_message = format!("Joining {}...", code);
-                            // Network send is handled in screen_button_system;
-                            // here we just mirror the validation path.
-                        }
                     }
                 }
                 _ => {}
@@ -914,7 +957,6 @@ fn screen_button_system(
     client: Res<AuthClient>,
     network: Res<NetworkClient>,
     lobby: Res<LobbyStore>,
-    mut exit_writer: MessageWriter<AppExit>,
     buttons: Query<(&Interaction, &ActionButton), (Changed<Interaction>, With<Button>)>,
 ) {
     for (interaction, button) in &buttons {
@@ -942,26 +984,24 @@ fn screen_button_system(
                 game.paused = true;
             }
             Action::LoginSubmit => {
-                let email = state.login_email.trim().to_string();
-                let password = state.login_password.clone();
+                let email = state.login_email.trim();
+                let password = state.login_password.as_str();
                 if email.is_empty() || password.is_empty() {
                     state.message = String::from("Fill in email and password.");
                 } else {
-                    state.pending_auth_email = Some(email.clone());
-                    request_login(&client, &email, &password);
+                                        request_login(&client, email, password);
                     state.message = String::from("Signing in...");
                 }
                 game.paused = true;
             }
             Action::RegisterSubmit => {
-                let email = state.register_email.trim().to_string();
-                let password = state.register_password.clone();
-                let nickname = state.register_nickname.trim().to_string();
+                let email = state.register_email.trim();
+                let password = state.register_password.as_str();
+                let nickname = state.register_nickname.trim();
                 if email.is_empty() || password.is_empty() || nickname.is_empty() {
                     state.message = String::from("Email, password, and nickname are required.");
                 } else {
-                    state.pending_auth_email = Some(email.clone());
-                    request_register(&client, &email, &password, &nickname);
+                                        request_register(&client, email, password, nickname);
                     state.message = String::from("Creating account...");
                 }
                 game.paused = true;
@@ -997,26 +1037,22 @@ fn screen_button_system(
                 game.paused = true;
             }
             Action::IntroQuit => {
-                exit_writer.write(AppExit::Success);
+                std::process::exit(0);
             }
             Action::LobbySelectCreate => {
                 state.lobby_panel = LobbyPanel::CreateRoom;
-                // Do NOT override active_lobby_mode here — it was set when the
-                // user entered the lobby via IntroOnline (Online) or IntroMulti
-                // (Multiplayer) and must be preserved so Create Room uses the
-                // correct game mode automatically.
+                state.active_lobby_mode = LobbyMode::Online;
                 state.current_room = None;
                 state.current_room_is_host = false;
-                state.active_field = None;
-                state.lobby_message = format!("Mode: {}. Press Create Room when ready.", state.active_lobby_mode.label());
+                state.active_field = Some(AuthField::RoomCode);
+                state.lobby_message = String::from("Select a game mode, then Create Room.");
                 game.paused = true;
             }
             Action::LobbySelectEnter => {
                 state.lobby_panel = LobbyPanel::EnterRoom;
                 state.current_room = None;
                 state.current_room_is_host = false;
-                // Do NOT clear room_code here so the user can type without it
-                // being wiped each time the panel is visited.
+                state.room_code.clear();
                 state.active_field = Some(AuthField::RoomCode);
                 state.lobby_message = String::from("Select a room or type its code, then Enter.");
                 game.paused = true;

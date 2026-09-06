@@ -26,9 +26,8 @@ pub fn save_room(
   host_id: Int,
   mode: String,
   player_ids: List(Int),
-  started: Bool,
 ) -> Nil {
-  spawn_write(auth_token, "rooms", code, room_fields(code, host_id, mode, player_ids, started))
+  spawn_write(auth_token, "rooms", code, room_fields(code, host_id, mode, player_ids))
 }
 
 /// Firestore document field values are typed objects, e.g.
@@ -62,13 +61,12 @@ fn room_fields(
   host_id: Int,
   mode: String,
   player_ids: List(Int),
-  started: Bool,
 ) -> json.Json {
   json.object([
     #("code", firestore_string(code)),
     #("host_id", firestore_int(host_id)),
     #("mode", firestore_string(mode)),
-    #("started", firestore_bool(started)),
+    #("started", firestore_bool(False)),
     #("players", firestore_array(list.map(player_ids, firestore_int))),
   ])
 }

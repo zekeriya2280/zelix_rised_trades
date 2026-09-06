@@ -20,6 +20,15 @@ pub const BUILDING_FOOTPRINT: usize = 2;
 /// World size of a building, matching the sprite size.
 pub const BUILDING_SIZE: f32 = CELL_SIZE * BUILDING_FOOTPRINT as f32;
 
+/// Centralized world-space render layers for all 2D gameplay visuals.
+/// Mesh vertex Z must remain local (normally 0); the entity Transform Z is
+/// the authoritative layer used by Bevy 2D rendering.
+pub const TERRAIN_Z: f32 = -20.0;
+pub const GRID_Z: f32 = -10.0;
+pub const ROAD_Z: f32 = 0.0;
+pub const VEHICLE_Z: f32 = 5.0;
+pub const BUILDING_Z: f32 = 20.0;
+
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum TerrainType {
     Sea,
@@ -115,10 +124,10 @@ pub fn setup_map_system(
             let base = vertices.len() as u32;
 
             vertices.extend_from_slice(&[
-                [wx, wy, -10.0],
-                [wx + CELL_SIZE, wy, -10.0],
-                [wx + CELL_SIZE, wy + CELL_SIZE, -10.0],
-                [wx, wy + CELL_SIZE, -10.0],
+                [wx, wy, 0.0],
+                [wx + CELL_SIZE, wy, 0.0],
+                [wx + CELL_SIZE, wy + CELL_SIZE, 0.0],
+                [wx, wy + CELL_SIZE, 0.0],
             ]);
             colors.extend_from_slice(&[color; 4]);
             indices.extend_from_slice(&[base, base + 1, base + 2, base, base + 2, base + 3]);
@@ -138,7 +147,7 @@ pub fn setup_map_system(
     commands.spawn((
         Mesh2d(meshes.add(tile_mesh)),
         MeshMaterial2d(terrain_material),
-        Transform::default(),
+        Transform::from_xyz(0.0, 0.0, TERRAIN_Z),
         MapRoot,
     ));
 
@@ -148,13 +157,9 @@ pub fn setup_map_system(
 
 /// Build an in-world grid of thin quads and spawn it as a `Mesh2d`. Unlike the
 /// old gizmo grid (which renders on top of every sprite), this mesh sits at
-/// `z = -5`, i.e. above the terrain (`z = -10`) but below all buildings
-/// (`z = 20`), so the grid lines never cover a building.
-///
-/// The grid uses a dedicated semi-transparent `ColorMaterial` (alpha < 1) so
-/// Bevy places it in the Transparent 2D phase — properly alpha-blended and
-/// depth-sorted behind the buildings, with no unstable opaque-phase overwrite
-/// against the terrain.
+/// The grid entity is placed at `GRID_Z`, above the terrain and below roads,
+/// vehicles, and buildings. Mesh vertices stay at local Z = 0 so render
+/// ordering is controlled in exactly one place: the entity Transform.
 pub fn setup_grid_lines(
     mut commands: Commands,
     mut meshes: ResMut<Assets<Mesh>>,
@@ -182,14 +187,14 @@ pub fn setup_grid_lines(
     mesh.insert_attribute(Mesh::ATTRIBUTE_POSITION, vertices);
     mesh.insert_indices(Indices::U32(indices));
 
-    // Transparent material: routes this mesh into the blended Transparent 2D
-    // phase so the lines are stable and never flicker against the terrain.
+    // Semi-transparent material keeps the underlying terrain visible through
+    // the grid while the entity Transform controls the Z layer.
     let grid_material = materials.add(ColorMaterial::from(Color::srgba(1.0, 1.0, 1.0, 0.14)));
 
     commands.spawn((
         Mesh2d(meshes.add(mesh)),
         MeshMaterial2d(grid_material),
-        Transform::from_xyz(0.0, 0.0, -5.0),
+        Transform::from_xyz(0.0, 0.0, GRID_Z),
     ));
 }
 

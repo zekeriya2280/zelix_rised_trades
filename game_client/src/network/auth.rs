@@ -119,14 +119,11 @@ pub fn poll_auth_responses_system(
 ) {
     while let Ok(response) = client.responses.try_recv() {
         if response.ok {
-            let email = state
-                .pending_auth_email
-                .take()
-                .unwrap_or_else(|| match state.screen {
-                    Screen::Login => state.login_email.trim().to_string(),
-                    Screen::Register => state.register_email.trim().to_string(),
-                    _ => String::new(),
-                });
+            let email = match state.screen {
+                Screen::Login => state.login_email.trim().to_string(),
+                Screen::Register => state.register_email.trim().to_string(),
+                _ => String::new(),
+            };
             auth.current_user = Some(UserAccount { email, nickname: response.nickname, token: response.token });
             state.login_password.clear();
             state.register_password.clear();
@@ -135,7 +132,6 @@ pub fn poll_auth_responses_system(
             state.message = response.message;
             game.paused = true;
         } else {
-            state.pending_auth_email = None;
             state.message = response.message;
         }
     }

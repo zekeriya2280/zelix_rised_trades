@@ -73,14 +73,3 @@ cargo ndk -t arm64-v8a -o android/app/src/main/jniLibs build --manifest-path gam
 ## Verification
 
 This source package was statically checked and its ZIP archive is integrity-tested. The execution environment used to assemble it does not contain the Rust/Gleam toolchains, so a live `cargo check` / `gleam test` run could not be performed here.
-
-## Production configuration
-
-The server accepts `FIREBASE_API_KEY` and `FIREBASE_PROJECT_ID` environment variables.
-For local development it can still read `firebase_config.json` or `google-services.json`.
-Do not commit production credentials.
-
-Android release builds now require an explicit `-ServerUrl`; debug builds default to the Android emulator host (`10.0.2.2`).
-Web builds accept `-ServerUrl`, otherwise the browser's current origin is used.
-
-The authoritative server supports multiple started rooms concurrently. Each room reset only clears players and entities that belong to that room, and snapshots are scoped to the requesting player's room.

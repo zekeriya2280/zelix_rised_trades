@@ -21,14 +21,14 @@ allowed_origin() ->
             ~"*"
     end.
 
--file("src\\server\\router.gleam", 764).
+-file("src\\server\\router.gleam", 750).
 -spec text(integer(), binary()) -> gleam@http@response:response(mist:response_data()).
 text(Status, Body) ->
     _pipe = gleam@http@response:new(Status),
     _pipe@1 = gleam@http@response:set_header(_pipe, ~"content-type", ~"text/plain; charset=utf-8"),
     gleam@http@response:set_body(_pipe@1, {bytes, gleam_stdlib:wrap_list(Body)}).
 
--file("src\\server\\router.gleam", 780).
+-file("src\\server\\router.gleam", 766).
 -spec cors(gleam@http@response:response(mist:response_data())) -> gleam@http@response:response(mist:response_data()).
 cors(Resp) ->
     _pipe = Resp,
@@ -36,7 +36,7 @@ cors(Resp) ->
     _pipe@2 = gleam@http@response:set_header(_pipe@1, ~"access-control-allow-methods", ~"POST, OPTIONS"),
     gleam@http@response:set_header(_pipe@2, ~"access-control-allow-headers", ~"content-type, authorization").
 
--file("src\\server\\router.gleam", 798).
+-file("src\\server\\router.gleam", 784).
 -spec auth_response(gleam@http@request:request(mist@internal@http:connection()), binary()) -> gleam@http@response:response(mist:response_data()).
 auth_response(Request, Action) ->
     case erlang:element(2, Request) of
@@ -71,7 +71,7 @@ auth_response(Request, Action) ->
             cors(text(405, ~"method not allowed"))
     end.
 
--file("src\\server\\router.gleam", 751).
+-file("src\\server\\router.gleam", 737).
 -spec disconnect_player(ws_state()) -> nil.
 disconnect_player(State) ->
     case erlang:element(3, State) of
@@ -82,12 +82,12 @@ disconnect_player(State) ->
             nil
     end.
 
--file("src\\server\\router.gleam", 740).
+-file("src\\server\\router.gleam", 726).
 -spec ignore_send(mist@internal@websocket:websocket_connection(), server@messages:server_message()) -> {ok, nil} | {error, glisten@socket:socket_reason()}.
 ignore_send(Connection, Message) ->
     _ = mist:send_text_frame(Connection, server@messages:encode_server(Message)).
 
--file("src\\server\\router.gleam", 726).
+-file("src\\server\\router.gleam", 712).
 -spec send_and_continue(ws_state(), mist@internal@websocket:websocket_connection(), server@messages:server_message()) -> mist:next(ws_state(), nil).
 send_and_continue(State, Connection, Message) ->
     _ = ignore_send(Connection, Message),
@@ -333,28 +333,22 @@ handle_ping(State, Connection) ->
     _ = send_lobby_for(State, Connection),
     mist:continue(State).
 
--file("src\\server\\router.gleam", 712).
--spec send_and_stop(ws_state(), mist@internal@websocket:websocket_connection(), server@messages:server_message()) -> mist:next(ws_state(), nil).
-send_and_stop(_, Connection, Message) ->
-    _ = ignore_send(Connection, Message),
-    mist:stop().
-
 -file("src\\server\\router.gleam", 119).
 -spec handle_join(ws_state(), mist@internal@websocket:websocket_connection(), binary()) -> mist:next(ws_state(), nil).
 handle_join(State, Connection, Token) ->
     case erlang:element(3, State) of
         {some, _} ->
-            send_and_stop(State, Connection, {server_error, ~"Already authenticated."});
+            send_and_continue(State, Connection, {server_error, ~"Already authenticated."});
 
         none ->
             case Token =:= ~"" of
                 true ->
-                    send_and_stop(State, Connection, {server_error, ~"Authentication required."});
+                    send_and_continue(State, Connection, {server_error, ~"Authentication required."});
 
                 false ->
                     case server@auth:verify_identity(Token) of
                         {error, _} ->
-                            send_and_stop(State, Connection, {server_error, ~"Invalid authentication token."});
+                            send_and_continue(State, Connection, {server_error, ~"Invalid authentication token."});
 
                         {ok, {Uid, Nickname}} ->
                             Reply = gleam@erlang@process:new_subject(),
@@ -369,14 +363,14 @@ handle_join(State, Connection, Token) ->
                                             mist:continue(New_state);
 
                                         {error, Message} ->
-                                            send_and_stop(New_state, Connection, {server_error, Message})
+                                            send_and_continue(New_state, Connection, {server_error, Message})
                                     end;
 
                                 {ok, {error, Message@1}} ->
-                                    send_and_stop(State, Connection, {server_error, Message@1});
+                                    send_and_continue(State, Connection, {server_error, Message@1});
 
                                 {error, nil} ->
-                                    send_and_stop(State, Connection, {server_error, ~"World timeout."})
+                                    send_and_continue(State, Connection, {server_error, ~"World timeout."})
                             end
                     end
             end

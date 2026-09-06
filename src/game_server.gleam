@@ -1,9 +1,11 @@
+import gleam/dict
 import gleam/float
 import gleam/json
 import gleam/int
 import gleam/list
 import gleam/option
 import gleam/string
+import gleam/set
 import gleam/erlang/process
 import server/firestore
 import server/messages
@@ -28,7 +30,17 @@ pub type Bank { Bank(id: Int, owner_id: Int, position: Position) }
 pub type Factory { Factory(id: Int, owner_id: Int, position: Position, level: Int, product: messages.ProductType) }
 pub type Warehouse { Warehouse(id: Int, owner_id: Int, position: Position, capacity: Int) }
 pub type SimpleBuilding { SimpleBuilding(id: Int, owner_id: Int, position: Position) }
-pub type Vehicle { Vehicle(id: Int, owner_id: Int, position: Position, target: Position, speed: Float) }
+pub type Vehicle {
+  Vehicle(
+    id: Int,
+    owner_id: Int,
+    position: Position,
+    target: Position,
+    speed: Float,
+    path: List(Position),
+    path_index: Int,
+  )
+}
 
 pub type Room {
   Room(id: String, host_id: Int, mode: String, players: List(Int), started: Bool)
@@ -229,7 +241,10 @@ fn handle(message: Message, world: World) -> World {
 
 fn update(world: World) -> World {
   let next_tick = world.tick + 1
-  let vehicles = list.map(world.vehicles, move_vehicle)
+  let moved_vehicles = list.map(world.vehicles, move_vehicle)
+  // A completed vehicle is removed after it reaches the authoritative final
+  // grid waypoint. This prevents stale trucks from accumulating forever.
+  let vehicles = list.filter(moved_vehicles, fn(vehicle) { !vehicle_finished(vehicle) })
   let players =
     case next_tick % production_interval_ticks == 0 {
       True -> list.map(world.players, fn(player) { produce_for_player(player, world.factories, world.warehouses) })
@@ -313,39 +328,318 @@ fn spawn_vehicle(world: World, player_id: Int, x: Float, y: Float, tx: Float, ty
     False -> #(world, Error("Invalid vehicle position or player session."))
     True -> case speed >. 0.0 && speed <=. vehicle_speed_max {
       False -> #(world, Error("Invalid vehicle speed."))
-      True -> case owned_factory_at(world, player_id, x, y) {
-        False -> #(world, Error("Vehicle source must be one of your factories."))
-        True -> case owned_destination_at(world, player_id, tx, ty) {
-          False -> #(world, Error("Vehicle target must be one of your factories or warehouses."))
-          True -> {
-            let id = world.next_id
-            let vehicle = Vehicle(id, player_id, Position(x, y), Position(tx, ty), speed)
-            #(World(..world, next_id: id + 1, vehicles: [vehicle, ..world.vehicles]), Ok(Nil))
+      True -> case owned_factory_position(world, player_id, x, y) {
+        option.None -> #(world, Error("Vehicle source must be one of your factories."))
+        option.Some(source_position) -> case owned_destination_position(world, player_id, tx, ty) {
+          option.None -> #(world, Error("Vehicle target must be one of your factories or warehouses."))
+          option.Some(target_position) -> case same_position(source_position, target_position) {
+            True -> #(world, Error("Vehicle source and destination must be different buildings."))
+            False -> {
+            let blocked = blocked_building_cells(world, player_id)
+            case grid_route(source_position, target_position, blocked) {
+              option.None -> #(world, Error("No valid 4-way grid route exists between the buildings."))
+              option.Some(path) -> {
+                let start = case path {
+                  [first, ..] -> first
+                  [] -> source_position
+                }
+                let id = world.next_id
+                let vehicle = Vehicle(
+                  id,
+                  player_id,
+                  start,
+                  target_position,
+                  speed,
+                  path,
+                  1,
+                )
+                #(World(..world, next_id: id + 1, vehicles: [vehicle, ..world.vehicles]), Ok(Nil))
+              }
+            }
           }
         }
+      }
       }
     }
   }
 }
 
-fn owned_factory_at(world: World, player_id: Int, x: Float, y: Float) -> Bool {
-  list.any(world.factories, fn(factory) {
-    factory.owner_id == player_id && same_position(factory.position, Position(x, y))
+fn owned_factory_position(world: World, player_id: Int, x: Float, y: Float) -> option.Option(Position) {
+  list.fold(world.factories, option.None, fn(found, factory) {
+    case found {
+      option.Some(_) -> found
+      option.None -> case factory.owner_id == player_id && same_position(factory.position, Position(x, y)) {
+        True -> option.Some(factory.position)
+        False -> option.None
+      }
+    }
   })
 }
 
-fn owned_destination_at(world: World, player_id: Int, x: Float, y: Float) -> Bool {
-  list.any(world.factories, fn(factory) {
-    factory.owner_id == player_id && same_position(factory.position, Position(x, y))
-  })
-  || list.any(world.warehouses, fn(warehouse) {
-    warehouse.owner_id == player_id && same_position(warehouse.position, Position(x, y))
-  })
+fn owned_destination_position(world: World, player_id: Int, x: Float, y: Float) -> option.Option(Position) {
+  case owned_factory_position(world, player_id, x, y) {
+    option.Some(position) -> option.Some(position)
+    option.None -> list.fold(world.warehouses, option.None, fn(found, warehouse) {
+      case found {
+        option.Some(_) -> found
+        option.None -> case warehouse.owner_id == player_id && same_position(warehouse.position, Position(x, y)) {
+          True -> option.Some(warehouse.position)
+          False -> option.None
+        }
+      }
+    })
+  }
 }
 
 fn same_position(a: Position, b: Position) -> Bool {
   distance(a, b) <=. 1.0
 }
+
+// ---- Authoritative server grid/pathfinding ---------------------------------
+// The client used to calculate an A* road while the server moved the vehicle
+// in a straight line. That made the drawn road and actual vehicle trajectory
+// diverge. The server now calculates the single authoritative 4-way route.
+
+const grid_size = 100
+const cell_size = 20.0
+const building_footprint = 2
+const map_half = 1000.0
+
+type Cell { Cell(x: Int, y: Int) }
+
+fn blocked_building_cells(world: World, player_id: Int) -> List(Cell) {
+  let room_players = case player_room(world, player_id) {
+    option.Some(room) -> room.players
+    option.None -> [player_id]
+  }
+  let visible_owner = fn(owner_id: Int) { list.any(room_players, fn(id) { id == owner_id }) }
+  list.flatten(list.flatten([
+    list.map(list.filter(world.banks, fn(item) { visible_owner(item.owner_id) }), fn(item) { footprint_cells(item.position) }),
+    list.map(list.filter(world.factories, fn(item) { visible_owner(item.owner_id) }), fn(item) { footprint_cells(item.position) }),
+    list.map(list.filter(world.warehouses, fn(item) { visible_owner(item.owner_id) }), fn(item) { footprint_cells(item.position) }),
+    list.map(list.filter(world.gatherers, fn(item) { visible_owner(item.owner_id) }), fn(item) { footprint_cells(item.position) }),
+    list.map(list.filter(world.farms, fn(item) { visible_owner(item.owner_id) }), fn(item) { footprint_cells(item.position) }),
+  ]))
+}
+
+fn footprint_cells(position: Position) -> List(Cell) {
+  let #(cx, cy) = world_to_cell(position)
+  let fx = cx - remainder(cx, building_footprint)
+  let fy = cy - remainder(cy, building_footprint)
+  [
+    Cell(fx, fy),
+    Cell(fx + 1, fy),
+    Cell(fx, fy + 1),
+    Cell(fx + 1, fy + 1),
+  ]
+}
+
+fn remainder(value: Int, divisor: Int) -> Int {
+  value - value / divisor * divisor
+}
+
+fn world_to_cell(position: Position) -> #(Int, Int) {
+  #(
+    float.truncate({position.x +. map_half} /. cell_size),
+    float.truncate({position.y +. map_half} /. cell_size),
+  )
+}
+
+fn cell_to_world(cell: Cell) -> Position {
+  let Cell(x, y) = cell
+  Position(
+    {int.to_float(x) +. 0.5} *. cell_size -. map_half,
+    {int.to_float(y) +. 0.5} *. cell_size -. map_half,
+  )
+}
+
+fn cell_in_bounds(cell: Cell) -> Bool {
+  let Cell(x, y) = cell
+  x >= 0 && y >= 0 && x < grid_size && y < grid_size
+}
+
+fn is_blocked(cells: List(Cell), cell: Cell) -> Bool {
+  list.any(cells, fn(item) { item == cell })
+}
+
+fn road_walkable(cells: List(Cell), cell: Cell) -> Bool {
+  let Cell(x, y) = cell
+  case cell_in_bounds(cell) && !is_blocked(cells, cell) && x >= 4 && y >= 4 && x < 96 && y < 96 {
+    False -> False
+    True -> {
+      let Position(wx, wy) = cell_to_world(cell)
+      let normalized = {terrain_height(wx, wy) +. 1.0} /. 2.0
+      normalized >=. 0.08 && normalized <. 0.84
+    }
+  }
+}
+
+fn boundary_cell_towards(cells: List(Cell), center: Position, target: Position) -> option.Option(Cell) {
+  let #(cx, cy) = world_to_cell(center)
+  let fx = cx - remainder(cx, building_footprint)
+  let fy = cy - remainder(cy, building_footprint)
+  let dir_x = target.x -. center.x
+  let dir_y = target.y -. center.y
+  let candidates = [
+    Cell(fx - 1, fy), Cell(fx - 1, fy + 1),
+    Cell(fx + 2, fy), Cell(fx + 2, fy + 1),
+    Cell(fx, fy - 1), Cell(fx + 1, fy - 1),
+    Cell(fx, fy + 2), Cell(fx + 1, fy + 2),
+  ]
+  choose_directional_cell(
+    list.filter(candidates, fn(cell) { road_walkable(cells, cell) }),
+    center,
+    dir_x,
+    dir_y,
+  )
+}
+
+fn choose_directional_cell(cells: List(Cell), center: Position, dx: Float, dy: Float) -> option.Option(Cell) {
+  let length = float.square_root(dx *. dx +. dy *. dy)
+  let #(nx, ny) = case length {
+    Ok(value) if value >. 0.001 -> #(dx /. value, dy /. value)
+    _ -> #(0.0, 0.0)
+  }
+  choose_best_direction(cells, center, nx, ny, option.None)
+}
+
+fn choose_best_direction(
+  cells: List(Cell),
+  center: Position,
+  nx: Float,
+  ny: Float,
+  best: option.Option(#(Float, Cell)),
+) -> option.Option(Cell) {
+  case cells {
+    [] -> case best {
+      option.None -> option.None
+      option.Some(#(_, cell)) -> option.Some(cell)
+    }
+    [cell, ..rest] -> {
+      let Position(px, py) = cell_to_world(cell)
+      let score = {px -. center.x} *. nx +. {py -. center.y} *. ny
+      let next_best = case best {
+        option.None -> option.Some(#(score, cell))
+        option.Some(#(best_score, best_cell)) -> case score >. best_score {
+          True -> option.Some(#(score, cell))
+          False -> option.Some(#(best_score, best_cell))
+        }
+      }
+      choose_best_direction(rest, center, nx, ny, next_best)
+    }
+  }
+}
+
+fn grid_route(source: Position, target: Position, blocked: List(Cell)) -> option.Option(List(Position)) {
+  let start = boundary_cell_towards(blocked, source, target)
+  let goal = boundary_cell_towards(blocked, target, source)
+  case start, goal {
+    option.Some(start_cell), option.Some(goal_cell) -> bfs_route(blocked, start_cell, goal_cell)
+    _, _ -> option.None
+  }
+}
+
+type GridQueue {
+  GridQueue(front: List(Cell), back: List(Cell))
+}
+
+fn bfs_route(blocked: List(Cell), start: Cell, goal: Cell) -> option.Option(List(Position)) {
+  case start == goal {
+    True -> option.Some([cell_to_world(start)])
+    False -> {
+      let queue = GridQueue([start], [])
+      let visited = set.new() |> set.insert(start)
+      bfs_loop(blocked, queue, visited, dict.new(), goal, start)
+    }
+  }
+}
+
+fn bfs_loop(
+  blocked: List(Cell),
+  queue: GridQueue,
+  visited: set.Set(Cell),
+  parents: dict.Dict(Cell, Cell),
+  goal: Cell,
+  start: Cell,
+) -> option.Option(List(Position)) {
+  case queue_pop(queue) {
+    option.None -> option.None
+    option.Some(#(current, rest_queue)) -> {
+      let candidates = list.filter(neighbors(current), fn(cell) {
+        road_walkable(blocked, cell) && !set.contains(visited, cell)
+      })
+      let next_visited = list.fold(candidates, visited, fn(acc, cell) { set.insert(acc, cell) })
+      let next_parents = list.fold(candidates, parents, fn(acc, cell) { dict.insert(acc, cell, current) })
+      case first_matching_cell(candidates, goal) {
+        option.Some(_) -> option.Some(reconstruct_path(next_parents, start, goal))
+        option.None -> bfs_loop(
+          blocked,
+          queue_push_many(rest_queue, candidates),
+          next_visited,
+          next_parents,
+          goal,
+          start,
+        )
+      }
+    }
+  }
+}
+
+fn queue_pop(queue: GridQueue) -> option.Option(#(Cell, GridQueue)) {
+  let GridQueue(front, back) = queue
+  case front {
+    [first, ..rest] -> option.Some(#(first, GridQueue(rest, back)))
+    [] -> case list.reverse(back) {
+      [] -> option.None
+      [first, ..rest] -> option.Some(#(first, GridQueue(rest, [])))
+    }
+  }
+}
+
+fn queue_push_many(queue: GridQueue, cells: List(Cell)) -> GridQueue {
+  let GridQueue(front, back) = queue
+  GridQueue(front, list.reverse(cells) |> list.append(back))
+}
+
+fn reconstruct_path(parents: dict.Dict(Cell, Cell), start: Cell, goal: Cell) -> List(Position) {
+  reconstruct_cells(parents, start, goal, [goal])
+  |> list.map(cell_to_world)
+}
+
+fn reconstruct_cells(
+  parents: dict.Dict(Cell, Cell),
+  start: Cell,
+  current: Cell,
+  acc: List(Cell),
+) -> List(Cell) {
+  case current == start {
+    True -> list.reverse(acc)
+    False -> case dict.get(parents, current) {
+      Ok(previous) -> reconstruct_cells(parents, start, previous, [previous, ..acc])
+      Error(_) -> list.reverse(acc)
+    }
+  }
+}
+
+fn first_matching_cell(cells: List(Cell), goal: Cell) -> option.Option(Cell) {
+  case cells {
+    [] -> option.None
+    [first, ..rest] -> case first == goal {
+      True -> option.Some(first)
+      False -> first_matching_cell(rest, goal)
+    }
+  }
+}
+
+fn neighbors(cell: Cell) -> List(Cell) {
+  let Cell(x, y) = cell
+  [Cell(x + 1, y), Cell(x - 1, y), Cell(x, y + 1), Cell(x, y - 1)]
+}
+
+fn vehicle_finished(vehicle: Vehicle) -> Bool {
+  vehicle.path_index >= list.length(vehicle.path)
+}
+
 
 fn set_factory_product(world: World, player_id: Int, factory_id: Int, product: messages.ProductType) -> #(World, Result(Nil, String)) {
   let found = list.any(world.factories, fn(factory) { factory.id == factory_id && factory.owner_id == player_id })
@@ -372,7 +666,7 @@ fn validate_position(world: World, player_id: Int, x: Float, y: Float, cost: Int
         False -> Error("Not enough money.")
         True -> case terrain_buildable_footprint(x, y) {
           False -> Error("Buildings can only be placed on valid land.")
-          True -> case too_close(world, x, y) {
+          True -> case too_close(world, player_id, x, y) {
             True -> Error("Buildings must be at least 50 units apart.")
             False -> Ok(Nil)
           }
@@ -418,21 +712,23 @@ fn validate_coordinate(value: Float) -> Bool {
     && value <=. world_limit
 }
 
-fn too_close(world: World, x: Float, y: Float) -> Bool {
-  list.any(all_positions(world), fn(position) { distance(position, Position(x, y)) <. minimum_distance })
+fn too_close(world: World, player_id: Int, x: Float, y: Float) -> Bool {
+  let positions = positions_for_room(world, player_id)
+  list.any(positions, fn(position) { distance(position, Position(x, y)) <. minimum_distance })
 }
 
-fn all_positions(world: World) -> List(Position) {
-  list.append(
-    list.map(world.banks, fn(item) { item.position }),
-    list.append(
-      list.map(world.factories, fn(item) { item.position }),
-      list.append(
-        list.map(world.warehouses, fn(item) { item.position }),
-        list.append(list.map(world.gatherers, fn(item) { item.position }), list.map(world.farms, fn(item) { item.position })),
-      ),
-    ),
-  )
+fn positions_for_room(world: World, player_id: Int) -> List(Position) {
+  let room_players = case player_room(world, player_id) {
+    option.Some(room) -> room.players
+    option.None -> [player_id]
+  }
+  let visible_owner = fn(owner_id: Int) { list.any(room_players, fn(id) { id == owner_id }) }
+  let bank_positions = list.map(list.filter(world.banks, fn(item) { visible_owner(item.owner_id) }), fn(item) { item.position })
+  let factory_positions = list.map(list.filter(world.factories, fn(item) { visible_owner(item.owner_id) }), fn(item) { item.position })
+  let warehouse_positions = list.map(list.filter(world.warehouses, fn(item) { visible_owner(item.owner_id) }), fn(item) { item.position })
+  let gatherer_positions = list.map(list.filter(world.gatherers, fn(item) { visible_owner(item.owner_id) }), fn(item) { item.position })
+  let farm_positions = list.map(list.filter(world.farms, fn(item) { visible_owner(item.owner_id) }), fn(item) { item.position })
+  list.flatten([bank_positions, factory_positions, warehouse_positions, gatherer_positions, farm_positions])
 }
 
 fn inside_owned_city(world: World, player_id: Int, x: Float, y: Float) -> Bool {
@@ -511,15 +807,46 @@ fn safe_name(name: String) -> String {
 }
 
 fn move_vehicle(vehicle: Vehicle) -> Vehicle {
-  let Position(x, y) = vehicle.position
-  let Position(tx, ty) = vehicle.target
-  let dx = tx -. x
-  let dy = ty -. y
-  let d = distance(vehicle.position, vehicle.target)
-  let step = vehicle.speed *. 0.05
-  case d <=. step || d <=. 0.001 {
-    True -> Vehicle(..vehicle, position: vehicle.target)
-    False -> Vehicle(..vehicle, position: Position(x +. dx /. d *. step, y +. dy /. d *. step))
+  case vehicle.path_index >= list.length(vehicle.path) {
+    True -> vehicle
+    False -> {
+      let target = nth_position(vehicle.path, vehicle.path_index)
+      let position = vehicle.position
+      let distance_to_target = distance(position, target)
+      let step = vehicle.speed *. 0.05
+      case distance_to_target <=. step || distance_to_target <=. 0.001 {
+        True -> Vehicle(
+          ..vehicle,
+          position: target,
+          path_index: vehicle.path_index + 1,
+        )
+        False -> {
+        let Position(x, y) = position
+        let Position(tx, ty) = target
+        let dx = tx -. x
+        let dy = ty -. y
+        let direction = case float.square_root(dx *. dx +. dy *. dy) {
+          Ok(length) if length >. 0.001 -> #(dx /. length, dy /. length)
+          _ -> #(0.0, 0.0)
+        }
+        let #(ux, uy) = direction
+        Vehicle(
+          ..vehicle,
+          position: Position(x +. ux *. step, y +. uy *. step),
+        )
+        }
+      }
+    }
+  }
+}
+
+fn nth_position(values: List(Position), index: Int) -> Position {
+  case values {
+    [first, ..rest] -> case index {
+      0 -> first
+      _ -> nth_position(rest, index - 1)
+    }
+    [] -> Position(0.0, 0.0)
   }
 }
 
@@ -603,7 +930,7 @@ fn create_room(world: World, player_id: Int, mode: String) -> #(World, Result(St
         let room = Room(code, player_id, mode, [player_id], False)
         let host = get_player(world.players, player_id)
         firestore.save_player(host.auth_token, host.auth_uid, host.name)
-        firestore.save_room(host.auth_token, code, player_id, mode, [player_id], False)
+        firestore.save_room(host.auth_token, code, player_id, mode, [player_id])
         #(World(..world, rooms: [room, ..world.rooms], next_room_id: world.next_room_id + 1), Ok(code))
       }
     }
@@ -624,7 +951,7 @@ fn join_room(world: World, player_id: Int, code: String) -> #(World, Result(Stri
             False -> {
               let updated = Room(..room, players: [player_id, ..room.players])
               let host = get_player(world.players, room.host_id)
-              firestore.save_room(host.auth_token, room.id, room.host_id, room.mode, updated.players, updated.started)
+              firestore.save_room(host.auth_token, room.id, room.host_id, room.mode, updated.players)
               #(replace_room(world, updated), Ok(room.id))
             }
           }
@@ -647,7 +974,7 @@ fn start_room(world: World, player_id: Int) -> #(World, Result(Nil, String)) {
           let prepared = reset_room_match_state(world, room.players)
           let updated = Room(..room, started: True)
           let host = get_player(prepared.players, room.host_id)
-          firestore.save_room(host.auth_token, room.id, room.host_id, room.mode, updated.players, True)
+          firestore.save_room(host.auth_token, room.id, room.host_id, room.mode, updated.players)
           #(replace_room(prepared, updated), Ok(Nil))
         }
       }
@@ -671,7 +998,7 @@ fn leave_room(world: World, player_id: Int) -> #(World, Result(Nil, String)) {
           let new_host = case room.host_id == player_id { True -> hd(players) False -> room.host_id }
           let updated = Room(..room, host_id: new_host, players: players)
           let host = get_player(cleaned.players, new_host)
-          firestore.save_room(host.auth_token, updated.id, updated.host_id, updated.mode, updated.players, updated.started)
+          firestore.save_room(host.auth_token, updated.id, updated.host_id, updated.mode, updated.players)
           replace_room(cleaned, updated)
         }
       }
@@ -850,7 +1177,23 @@ fn simple_json(building: SimpleBuilding) -> json.Json {
 fn vehicle_json(vehicle: Vehicle) -> json.Json {
   let Position(x, y) = vehicle.position
   let Position(tx, ty) = vehicle.target
-  json.object([#("id", json.int(vehicle.id)), #("owner_id", json.int(vehicle.owner_id)), #("x", json.float(x)), #("y", json.float(y)), #("target_x", json.float(tx)), #("target_y", json.float(ty)), #("speed", json.float(vehicle.speed))])
+  let path = json.array(vehicle.path, path_position_json)
+  json.object([
+    #("id", json.int(vehicle.id)),
+    #("owner_id", json.int(vehicle.owner_id)),
+    #("x", json.float(x)),
+    #("y", json.float(y)),
+    #("target_x", json.float(tx)),
+    #("target_y", json.float(ty)),
+    #("speed", json.float(vehicle.speed)),
+    #("path", path),
+    #("path_index", json.int(vehicle.path_index)),
+  ])
+}
+
+fn path_position_json(position: Position) -> json.Json {
+  let Position(x, y) = position
+  json.object([#("x", json.float(x)), #("y", json.float(y))])
 }
 
 pub fn handle_test_factory(world: World, x: Float, y: Float) -> World {

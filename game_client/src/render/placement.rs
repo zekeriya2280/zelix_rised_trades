@@ -4,7 +4,7 @@ use crate::core::components::{
     Bank, CityRadius, Factory, Farm, Gatherer, PlacementPreview, Warehouse,
 };
 use crate::core::events::{BuildBankEvent, BuildStructureEvent, BuildingType, ProductType};
-use crate::render::map::{TerrainGrid, BUILDING_FOOTPRINT, BUILDING_SIZE, MIN_BUILDING_DISTANCE};
+use crate::render::map::{TerrainGrid, BUILDING_FOOTPRINT, BUILDING_SIZE, BUILDING_Z, MIN_BUILDING_DISTANCE};
 use crate::network::OnlineAuthority;
 
 pub const CITY_RADIUS: f32 = 300.0;
@@ -57,7 +57,7 @@ pub fn build_bank_system(
                 custom_size: Some(Vec2::splat(BUILDING_SIZE)),
                 ..default()
             },
-            Transform::from_xyz(snapped.x, snapped.y, 20.0),
+            Transform::from_xyz(snapped.x, snapped.y, BUILDING_Z),
         ));
     }
 }
@@ -193,7 +193,7 @@ pub fn build_structure_system(
                         custom_size: Some(Vec2::splat(BUILDING_SIZE)),
                         ..default()
                     },
-                    Transform::from_xyz(position.x, position.y, 20.0),
+                    Transform::from_xyz(position.x, position.y, BUILDING_Z),
                 ));
             }
             BuildingType::Factory => {
@@ -205,7 +205,7 @@ pub fn build_structure_system(
                         custom_size: Some(Vec2::splat(BUILDING_SIZE)),
                         ..default()
                     },
-                    Transform::from_xyz(position.x, position.y, 20.0),
+                    Transform::from_xyz(position.x, position.y, BUILDING_Z),
                 ));
             }
             BuildingType::Gatherer => {
@@ -216,7 +216,7 @@ pub fn build_structure_system(
                         custom_size: Some(Vec2::splat(BUILDING_SIZE)),
                         ..default()
                     },
-                    Transform::from_xyz(position.x, position.y, 20.0),
+                    Transform::from_xyz(position.x, position.y, BUILDING_Z),
                 ));
             }
             BuildingType::Farm => {
@@ -227,7 +227,7 @@ pub fn build_structure_system(
                         custom_size: Some(Vec2::splat(BUILDING_SIZE)),
                         ..default()
                     },
-                    Transform::from_xyz(position.x, position.y, 20.0),
+                    Transform::from_xyz(position.x, position.y, BUILDING_Z),
                 ));
             }
         }

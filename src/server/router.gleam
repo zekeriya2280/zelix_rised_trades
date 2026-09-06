@@ -123,7 +123,7 @@ fn handle_join(
 ) -> mist.Next(WsState, Nil) {
   case state.player_id {
     option.Some(_) ->
-      send_and_stop(
+      send_and_continue(
         state,
         connection,
         messages.ServerError("Already authenticated."),
@@ -132,7 +132,7 @@ fn handle_join(
     option.None ->
       case token == "" {
         True ->
-          send_and_stop(
+          send_and_continue(
             state,
             connection,
             messages.ServerError("Authentication required."),
@@ -141,7 +141,7 @@ fn handle_join(
         False ->
           case auth.verify_identity(token) {
             Error(_) ->
-              send_and_stop(
+              send_and_continue(
                 state,
                 connection,
                 messages.ServerError("Invalid authentication token."),
@@ -177,7 +177,7 @@ fn handle_join(
                       mist.continue(new_state)
 
                     Error(message) ->
-                      send_and_stop(
+                      send_and_continue(
                         new_state,
                         connection,
                         messages.ServerError(message),
@@ -186,14 +186,14 @@ fn handle_join(
                 }
 
                 Ok(Error(message)) ->
-                  send_and_stop(
+                  send_and_continue(
                     state,
                     connection,
                     messages.ServerError(message),
                   )
 
                 Error(Nil) ->
-                  send_and_stop(
+                  send_and_continue(
                     state,
                     connection,
                     messages.ServerError("World timeout."),
@@ -707,20 +707,6 @@ fn send_snapshot_for(
       }
     }
   }
-}
-
-fn send_and_stop(
-  _state: WsState,
-  connection: mist.WebsocketConnection,
-  message: messages.ServerMessage,
-) -> mist.Next(WsState, Nil) {
-  let _ =
-    ignore_send(
-      connection,
-      message,
-    )
-
-  mist.stop()
 }
 
 fn send_and_continue(

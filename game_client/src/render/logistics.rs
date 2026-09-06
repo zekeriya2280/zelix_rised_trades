@@ -9,7 +9,7 @@ use bevy::prelude::*;
 use crate::core::events::{ProductType, SetFactoryProductEvent};
 use crate::core::{Bank, Factory, Farm, Gatherer, OwnerId, PathFollower, Vehicle, Warehouse};
 use crate::render::camera::MainCamera;
-use crate::render::map::{self, BUILDING_SIZE, TerrainGrid};
+use crate::render::map::{self, BUILDING_SIZE, TerrainGrid, ROAD_Z, VEHICLE_Z};
 use crate::render::path::route_between;
 use crate::render::vehicle_render::VehicleSprite;
 use crate::network::{NetworkClient, OnlineAuthority};
@@ -228,7 +228,7 @@ pub fn select_destination_system(
                         waypoints: waypoints.clone(),
                         index: 0,
                     },
-                    Transform::from_xyz(src_pos.x, src_pos.y, 20.0),
+                    Transform::from_xyz(src_pos.x, src_pos.y, VEHICLE_Z),
                     VehicleSprite,
                 ))
                 .id();
@@ -313,7 +313,7 @@ pub fn spawn_segment(commands: &mut Commands, a: Vec2, b: Vec2) -> Entity {
             DeliveryRoadSegment,
             Sprite::from_color(Color::srgb(0.45, 0.35, 0.05), Vec2::new(length, 6.0)),
             Transform {
-                translation: Vec3::new(mid.x, mid.y, 15.0),
+                translation: Vec3::new(mid.x, mid.y, ROAD_Z),
                 rotation: Quat::from_rotation_z(angle),
                 ..default()
             },

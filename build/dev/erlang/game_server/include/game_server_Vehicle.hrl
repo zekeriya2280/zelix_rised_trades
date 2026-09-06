@@ -3,5 +3,7 @@
     owner_id :: integer(),
     position :: game_server:position(),
     target :: game_server:position(),
-    speed :: float()
+    speed :: float(),
+    path :: list(game_server:position()),
+    path_index :: integer()
 }).
