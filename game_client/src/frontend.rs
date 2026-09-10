@@ -216,7 +216,9 @@ enum Action {
     GameBack,
 }
 
-const PANEL: Color = Color::srgba(0.07, 0.08, 0.10, 0.96);
+// The menu panel is intentionally translucent so the world/buildings underneath
+// stay visible. 0.3 keeps text readable while letting the map show through.
+const PANEL: Color = Color::srgba(0.07, 0.08, 0.10, 0.3);
 const ACCENT: Color = Color::srgb(0.66, 0.78, 1.0);
 const TEXT: Color = Color::srgb(0.96, 0.97, 1.0);
 const MUTED: Color = Color::srgb(0.72, 0.76, 0.82);
@@ -850,6 +852,8 @@ fn keyboard_input_system(
     mut events: MessageReader<KeyboardInput>,
     mut state: ResMut<FrontendState>,
     client: Res<AuthClient>,
+    auth: Res<AuthStore>,
+    network: Res<NetworkClient>,
     keys: Res<ButtonInput<KeyCode>>,
 ) {
     for ev in events.read() {
@@ -890,6 +894,25 @@ fn keyboard_input_system(
                                         } else {
                         request_register(&client, email, password, nickname);
                         state.message = String::from("Creating account...");
+                    }
+                }
+                Screen::Lobby => {
+                    // The "Enter Game" button lives on the Enter Room panel; let
+                    // Enter activate it directly (same logic as clicking).
+                    if state.lobby_panel == LobbyPanel::EnterRoom {
+                        let code = state.room_code.trim().to_string();
+                        if code.is_empty() {
+                            state.lobby_message = String::from("Enter a Room ID first.");
+                        } else {
+                            state.active_field = None;
+                            state.lobby_message = format!("Joining {}...", code);
+                            send_lobby_command(
+                                &mut state,
+                                &auth,
+                                &network,
+                                crate::network::protocol::ClientMessage::LobbyJoin { code },
+                            );
+                        }
                     }
                 }
                 _ => {}

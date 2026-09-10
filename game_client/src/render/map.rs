@@ -165,6 +165,53 @@ pub fn setup_map_system(
 
     // Make the terrain grid queryable by the placement systems.
     commands.insert_resource(ter);
+
+    // --- Translucent dark overlay over the terrain ---
+    // The atlas palette reads as bright/vivid, so we dim the whole map with one
+    // big semi-transparent black quad layered just above the terrain (below the
+    // grid lines, roads, vehicles and buildings). This reduces the "too bright"
+    // look without touching the atlas asset or the game logic.
+    spawn_dark_overlay(commands, meshes, materials, half);
+}
+
+/// Build one full-map quad of a translucent black material and spawn it right
+/// above the terrain so the whole map renders visibly dimmer. Same technique as
+/// the grid lines (a semi-transparent `ColorMaterial` quad), but spanning the
+/// entire world instead of thin lines.
+fn spawn_dark_overlay(
+    mut commands: Commands,
+    mut meshes: ResMut<Assets<Mesh>>,
+    mut materials: ResMut<Assets<ColorMaterial>>,
+    half: f32,
+) {
+    let mut vertices: Vec<[f32; 3]> = Vec::with_capacity(4);
+    let mut indices: Vec<u32> = Vec::with_capacity(6);
+    vertices.extend_from_slice(&[
+        [-half, -half, 0.0],
+        [half, -half, 0.0],
+        [half, half, 0.0],
+        [-half, half, 0.0],
+    ]);
+    indices.extend_from_slice(&[0, 1, 2, 0, 2, 3]);
+
+    let mut mesh = Mesh::new(
+        PrimitiveTopology::TriangleList,
+        RenderAssetUsages::default(),
+    );
+    mesh.insert_attribute(Mesh::ATTRIBUTE_POSITION, vertices);
+    mesh.insert_indices(Indices::U32(indices));
+
+    // Alpha ~0.22 keeps the terrain recognisable while noticeably toning the
+    // bright palette down. Raise it to dim further.
+    let overlay_material = materials.add(ColorMaterial::from(Color::srgba(0.0, 0.0, 0.0, 0.22)));
+
+    commands.spawn((
+        Mesh2d(meshes.add(mesh)),
+        MeshMaterial2d(overlay_material),
+        // Between the terrain (-20) and the grid (-10): darkens the ground but
+        // leaves grid lines, roads, vehicles and buildings untouched.
+        Transform::from_xyz(0.0, 0.0, TERRAIN_Z + 1.0),
+    ));
 }
 
 /// Build an in-world grid of thin quads and spawn it as a `Mesh2d`. Unlike the

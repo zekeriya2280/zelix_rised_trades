@@ -9,7 +9,6 @@
                     mist]},
     {description, ""},
     {modules, [game_server,
-               game_server_os_ffi,
                game_server_test,
                main,
                server@auth,
